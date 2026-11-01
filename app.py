@@ -42,7 +42,8 @@ def handle_peak_selection():
 
 st.set_page_config(page_title="GammaSpec", page_icon="☢️", layout="wide")
 st.title("GammaSpec")
-st.markdown("**Gamma-ray spectroscopy workbench** · Simulation, calibration and peak analysis")
+st.markdown("**Gamma-ray spectroscopy workbench** · Spectra, detector response and radiation interactions")
+st.caption("Use the navigation tabs to move between spectrum analysis, advanced fitting, detector physics and radiation interactions.")
 st.caption("Research and education prototype · Not for radiation safety, dosimetry, or authoritative isotope identification.")
 with st.sidebar:
     st.header("Acquisition")
@@ -170,8 +171,8 @@ try:
         fig.update_xaxes(range=[450, 540])
     fig.update_layout(xaxis_title="Energy (keV)", yaxis_title="Counts per channel",
                       yaxis_type="log" if log_scale else "linear", template="plotly_dark")
-    overview_tab, peaks_tab, match_tab, calibration_tab, validation_tab, report_tab = st.tabs(
-        ["Spectrum", "Peak analysis", "Reference matching", "Calibration", "Validation", "Report"])
+    overview_tab, peaks_tab, advanced_tab, detector_tab, interactions_tab, match_tab, calibration_tab, validation_tab, report_tab = st.tabs(
+        ["Spectrum", "Peak analysis", "Advanced fitting", "Detector physics", "Radiation interactions", "Reference matching", "Calibration", "Validation", "Report"])
     with overview_tab:
         if isotope == "Overlapping demo" and upload is None and not enable_calibration:
             st.info("Zoomed to 450–540 keV. Orange vertical lines mark injected centers; dotted curves show each injected Gaussian component. The measured total can still have only one maximum. × markers show noisy local maxima.")
@@ -215,6 +216,41 @@ try:
             else:
                 st.info("No detected or fitted peak energies to compare.")
             st.caption("Detected maxima and fitted centroids are different quantities. Two fitted components do not establish two physical emissions.")
+        with detected_tab:
+            st.subheader("Detected local maxima")
+            st.caption("These are noisy candidate maxima, not necessarily separate gamma emissions.")
+            st.metric("Detected maxima", len(peaks))
+            st.dataframe(peaks, use_container_width=True, hide_index=True)
+        with single_tab:
+            st.subheader("Single-Gaussian fits")
+            if fits is None:
+                st.info("Enable Fit candidate photopeaks in the sidebar to calculate single-peak fits.")
+            elif fits.empty:
+                st.info("No candidates passed the current prominence threshold.")
+            else:
+                st.dataframe(fits, use_container_width=True, hide_index=True)
+                st.caption("A single Gaussian fitted to overlapping peaks can return a centroid between their true centers.")
+                st.caption("Quality flags are heuristic; uncertainties assume the chosen fit model.")
+                st.download_button("Download single-peak fits CSV", fits.to_csv(index=False),
+                                   "peak_fits.csv", "text/csv")
+        with double_tab:
+            st.subheader("Simultaneous two-peak fit")
+            if not overlap_enabled:
+                st.info("Enable Fit two overlapping peaks in the sidebar to estimate two components.")
+            elif overlap_result is None:
+                st.warning("Two-component fitting is unavailable for the current settings; see the warning above.")
+            else:
+                components_table = pd.DataFrame(overlap_result["components"])
+                st.dataframe(components_table, use_container_width=True, hide_index=True)
+                st.metric("Reduced chi-square (descriptive)",
+                          f'{overlap_result["reduced_chi_square"]:.2f}')
+                st.caption(f'Quality flag: {overlap_result["quality_flag"]}. The two-component model does not establish two physical gamma emissions.')
+                st.download_button("Download two-component fits CSV",
+                                   components_table.to_csv(index=False),
+                                   "overlap_fits.csv", "text/csv")
+    with advanced_tab:
+        st.subheader("Advanced peak fitting and statistical diagnostics")
+        st.caption("Model comparisons, fit residuals and Monte Carlo studies are grouped here to keep routine peak analysis focused.")
         with st.expander("Fit residual diagnostics", expanded=False):
             st.caption("Compare observed-minus-model residuals on the same energy channels. Standardized residuals divide by √max(observed counts, 1).")
             successful_fits = ([] if fits is None else
@@ -370,6 +406,9 @@ try:
                                    trial_results.to_csv(index=False),
                                    "resolution_trials.csv", "text/csv")
                 st.caption("Accurate recovery requires both fitted centroids within the selected tolerance of known injected centers. Seeded fits and this success criterion do not establish that peaks are independently detectable; small trial counts give noisy estimates.")
+    with detector_tab:
+        st.subheader("Detector physics")
+        st.caption("Explore illustrative detector energy resolution, efficiency and counting uncertainty.")
         with st.expander("Detector resolution and FWHM", expanded=False):
             st.caption("Illustrative detector response models: representative reference widths at 662 keV with square-root energy scaling, not measured detector specifications.")
             detector_choice = st.selectbox("Detector response", ["HPGe (illustrative)", "NaI(Tl) (illustrative)"], key="detector_choice")
@@ -438,6 +477,9 @@ try:
                                   template="plotly_dark", height=280)
             st.plotly_chart(snr_fig, use_container_width=True)
             st.caption("Expected counts use incident rate × time × full-energy peak efficiency. SNR = expected signal / sqrt(signal + background), assuming known background; background estimation, dead time, pile-up, geometry and other detector effects are excluded.")
+    with interactions_tab:
+        st.subheader("Radiation interactions")
+        st.caption("Explore educational gamma-ray attenuation, Compton kinematics and angular scattering distributions.")
         with st.expander("Gamma attenuation and shielding explorer", expanded=False):
             st.caption("Educational narrow-beam model using approximate coefficients, not validated shielding data. Do not use for radiation safety or shield design.")
             shield_material = st.selectbox("Shield material", list(MATERIALS), key="shield_material")
@@ -534,38 +576,6 @@ try:
                 "dσ/dΩ (barns/sr/electron)": kn_cross / 1e-24})
             st.download_button("Download Klein–Nishina CSV", kn_table.to_csv(index=False),
                 "klein_nishina.csv", "text/csv")
-        with detected_tab:
-            st.subheader("Detected local maxima")
-            st.caption("These are noisy candidate maxima, not necessarily separate gamma emissions.")
-            st.metric("Detected maxima", len(peaks))
-            st.dataframe(peaks, use_container_width=True, hide_index=True)
-        with single_tab:
-            st.subheader("Single-Gaussian fits")
-            if fits is None:
-                st.info("Enable Fit candidate photopeaks in the sidebar to calculate single-peak fits.")
-            elif fits.empty:
-                st.info("No candidates passed the current prominence threshold.")
-            else:
-                st.dataframe(fits, use_container_width=True, hide_index=True)
-                st.caption("A single Gaussian fitted to overlapping peaks can return a centroid between their true centers.")
-                st.caption("Quality flags are heuristic; uncertainties assume the chosen fit model.")
-                st.download_button("Download single-peak fits CSV", fits.to_csv(index=False),
-                                   "peak_fits.csv", "text/csv")
-        with double_tab:
-            st.subheader("Simultaneous two-peak fit")
-            if not overlap_enabled:
-                st.info("Enable Fit two overlapping peaks in the sidebar to estimate two components.")
-            elif overlap_result is None:
-                st.warning("Two-component fitting is unavailable for the current settings; see the warning above.")
-            else:
-                components_table = pd.DataFrame(overlap_result["components"])
-                st.dataframe(components_table, use_container_width=True, hide_index=True)
-                st.metric("Reduced chi-square (descriptive)",
-                          f'{overlap_result["reduced_chi_square"]:.2f}')
-                st.caption(f'Quality flag: {overlap_result["quality_flag"]}. The two-component model does not establish two physical gamma emissions.')
-                st.download_button("Download two-component fits CSV",
-                                   components_table.to_csv(index=False),
-                                   "overlap_fits.csv", "text/csv")
     candidates = None
     if match_enabled:
       with match_tab:
