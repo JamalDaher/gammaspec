@@ -19,6 +19,7 @@ from gammaspec.monte_carlo import monte_carlo_recovery, recovery_summary
 from gammaspec.resolution import resolution_study, summarize_resolution
 from gammaspec.detector_resolution import fwhm_kev, resolution_percent, illustrative_doublet
 from gammaspec.efficiency import peak_efficiency, counting_statistics
+from gammaspec.attenuation import MATERIALS, linear_attenuation, transmission, attenuation_lengths
 import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
@@ -435,6 +436,39 @@ try:
                                   template="plotly_dark", height=280)
             st.plotly_chart(snr_fig, use_container_width=True)
             st.caption("Expected counts use incident rate × time × full-energy peak efficiency. SNR = expected signal / sqrt(signal + background), assuming known background; background estimation, dead time, pile-up, geometry and other detector effects are excluded.")
+        with st.expander("Gamma attenuation and shielding explorer", expanded=False):
+            st.caption("Educational narrow-beam model using approximate coefficients, not validated shielding data. Do not use for radiation safety or shield design.")
+            shield_material = st.selectbox("Shield material", list(MATERIALS), key="shield_material")
+            shield_energy = st.slider("Gamma energy (keV)", 100, 1600, 662, key="shield_energy")
+            shield_thickness = st.slider("Shield thickness (cm)", 0.0, 30.0, 5.0, 0.5, key="shield_thickness")
+            shield_mu = linear_attenuation(shield_material, shield_energy)
+            shield_lengths = attenuation_lengths(shield_material, shield_energy)
+            shield_transmission = transmission(shield_material, shield_energy, shield_thickness)
+            sc1, sc2, sc3 = st.columns(3)
+            sc1.metric("Uncollided transmission", f"{100 * shield_transmission:.3f}%")
+            sc2.metric("HVL", f'{shield_lengths["hvl_cm"]:.2f} cm')
+            sc3.metric("TVL", f'{shield_lengths["tvl_cm"]:.2f} cm')
+            thickness_axis = np.linspace(0, 30, 200)
+            attenuation_fig = go.Figure()
+            for mat in MATERIALS:
+                attenuation_fig.add_trace(go.Scatter(
+                    x=thickness_axis, y=100 * transmission(mat, shield_energy, thickness_axis),
+                    mode="lines", name=mat))
+            attenuation_fig.update_layout(xaxis_title="Thickness (cm)",
+                yaxis_title="Uncollided transmission (%)", yaxis_type="log",
+                template="plotly_dark", height=340)
+            st.plotly_chart(attenuation_fig, use_container_width=True)
+            shield_table = pd.DataFrame([
+                {"Material": mat, "Density (g/cm³)": MATERIALS[mat][0],
+                 "Linear attenuation (cm⁻¹)": linear_attenuation(mat, shield_energy),
+                 "HVL (cm)": attenuation_lengths(mat, shield_energy)["hvl_cm"],
+                 "TVL (cm)": attenuation_lengths(mat, shield_energy)["tvl_cm"],
+                 "Transmission (%)": 100 * transmission(mat, shield_energy, shield_thickness)}
+                for mat in MATERIALS])
+            st.dataframe(shield_table.round(3), use_container_width=True, hide_index=True)
+            st.download_button("Download attenuation comparison CSV",
+                shield_table.to_csv(index=False), "attenuation_comparison.csv", "text/csv")
+            st.caption("Beer–Lambert uncollided photon transmission only; scattered radiation, buildup, geometry, secondary radiation, mixtures and detector response are omitted. Coefficients are intentionally illustrative and must not be used for exposure or shielding decisions.")
         with detected_tab:
             st.subheader("Detected local maxima")
             st.caption("These are noisy candidate maxima, not necessarily separate gamma emissions.")
