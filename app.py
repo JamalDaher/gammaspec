@@ -23,6 +23,7 @@ from gammaspec.attenuation import MATERIALS, linear_attenuation, transmission, a
 from gammaspec.compton import scattered_energy, recoil_energy, compton_edge, scattered_wavelength_shift_pm
 from gammaspec.klein_nishina import differential_cross_section, angular_distribution, total_cross_section
 from gammaspec.learning_lab import EXERCISES, check_answer, lab_example
+from gammaspec.learning_progress import CHALLENGES, grade_numeric, record_attempt, progress_summary, progress_csv
 import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
@@ -606,23 +607,73 @@ try:
                 "klein_nishina.csv", "text/csv")
     with learning_tab:
         st.subheader("Gamma-ray spectrum learning lab")
-        st.caption("Five guided exercises covering source lines, counting statistics, detector resolution, Compton scattering, and attenuation.")
-        lab_topic = st.selectbox("Choose an exercise", list(EXERCISES), key="lab_topic")
-        lab_exercise = EXERCISES[lab_topic]
-        st.markdown(f"**Question:** {lab_exercise['prompt']}")
-        st.info(lab_example(lab_topic))
-        lab_choice = st.radio("Your answer", lab_exercise["choices"], index=None,
-                              key=f"lab_answer_{lab_topic}")
-        if st.button("Check answer", key="lab_check_answer", disabled=lab_choice is None):
-            st.session_state[f"lab_feedback_{lab_topic}"] = lab_choice
-        submitted = st.session_state.get(f"lab_feedback_{lab_topic}")
-        if submitted is not None:
-            if check_answer(lab_topic, submitted):
-                st.success("Correct!")
-            else:
-                st.warning(f"Not quite. The correct answer is: {lab_exercise['answer']}.")
-            st.markdown(lab_exercise["explanation"])
-        st.caption("Examples are illustrative. Exercises teach concepts, not radiation safety or isotope identification procedures.")
+        st.caption("Session-only progress: it resets when the app session ends. Export your progress before leaving.")
+        topics = list(EXERCISES) + list(CHALLENGES)
+        if "learning_progress" not in st.session_state:
+            st.session_state["learning_progress"] = {}
+        progress = st.session_state["learning_progress"]
+        stats = progress_summary(progress, topics)
+        p1, p2, p3 = st.columns(3)
+        p1.metric("Topics completed", f'{stats["completed"]}/{stats["total"]}')
+        p2.metric("Attempts", stats["attempts"])
+        p3.metric("Correct attempts", f'{stats["accuracy_percent"]:.0f}%')
+        st.progress(stats["completed"] / stats["total"] if stats["total"] else 0)
+        st.dataframe(pd.DataFrame([
+            {"Topic": topic, "Completed": "Yes" if progress.get(topic, {}).get("completed") else "No",
+             "Attempts": progress.get(topic, {}).get("attempts", 0),
+             "Correct": progress.get(topic, {}).get("correct", 0)}
+            for topic in topics]), use_container_width=True, hide_index=True)
+        st.download_button("Download learning progress CSV",
+            progress_csv(progress, topics), "gammaspec_learning_progress.csv", "text/csv",
+            key="learning_progress_download")
+        lab_topic = st.selectbox("Choose an exercise", topics, key="lab_topic")
+        if lab_topic in EXERCISES:
+            lab_exercise = EXERCISES[lab_topic]
+            st.markdown(f"**Question:** {lab_exercise['prompt']}")
+            st.info(lab_example(lab_topic))
+            lab_choice = st.radio("Your answer", lab_exercise["choices"], index=None,
+                                  key=f"lab_answer_{lab_topic}")
+            if st.button("Check answer", key="lab_check_answer", disabled=lab_choice is None):
+                correct = check_answer(lab_topic, lab_choice)
+                st.session_state["learning_progress"] = record_attempt(
+                    st.session_state["learning_progress"], lab_topic, correct)
+                st.session_state[f"lab_feedback_{lab_topic}"] = (correct, lab_choice)
+                st.rerun()
+            feedback = st.session_state.get(f"lab_feedback_{lab_topic}")
+            if feedback is not None:
+                if feedback[0]:
+                    st.success("Correct!")
+                else:
+                    st.warning(f"Not quite. The correct answer is: {lab_exercise['answer']}.")
+                st.markdown(lab_exercise["explanation"])
+            if st.button("Retry this question", key="lab_retry_choice"):
+                st.session_state.pop(f"lab_feedback_{lab_topic}", None)
+                st.session_state.pop(f"lab_answer_{lab_topic}", None)
+                st.rerun()
+        else:
+            challenge = CHALLENGES[lab_topic]
+            st.markdown(f"**Calculation:** {challenge['prompt']}")
+            numeric_answer = st.number_input(
+                f"Answer ({challenge['unit']})", value=0.0, step=0.1,
+                key=f"lab_numeric_{lab_topic}")
+            if st.button("Check calculation", key="lab_check_numeric"):
+                correct = grade_numeric(lab_topic, numeric_answer)
+                st.session_state["learning_progress"] = record_attempt(
+                    st.session_state["learning_progress"], lab_topic, correct)
+                st.session_state[f"lab_feedback_{lab_topic}"] = (correct, numeric_answer)
+                st.rerun()
+            feedback = st.session_state.get(f"lab_feedback_{lab_topic}")
+            if feedback is not None:
+                if feedback[0]:
+                    st.success("Correct!")
+                else:
+                    st.warning(f"Not quite. Expected approximately {challenge['answer']:g} {challenge['unit']}.")
+                st.markdown(challenge["explanation"])
+            if st.button("Retry this calculation", key="lab_retry_numeric"):
+                st.session_state.pop(f"lab_feedback_{lab_topic}", None)
+                st.session_state.pop(f"lab_numeric_{lab_topic}", None)
+                st.rerun()
+        st.caption("Educational examples only; not for radiation safety, dosimetry, or isotope identification.")
     candidates = None
     if match_enabled:
       with match_tab:
