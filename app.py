@@ -24,6 +24,7 @@ from gammaspec.compton import scattered_energy, recoil_energy, compton_edge, sca
 from gammaspec.klein_nishina import differential_cross_section, angular_distribution, total_cross_section
 from gammaspec.learning_lab import EXERCISES, check_answer, lab_example
 from gammaspec.learning_progress import CHALLENGES, grade_numeric, record_attempt, progress_summary, progress_csv
+from gammaspec.decay import HALF_LIVES_YEARS, remaining_activity, decay_fraction, parent_daughter_atoms
 import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
@@ -200,8 +201,8 @@ try:
         fig.update_xaxes(range=[450, 540])
     fig.update_layout(xaxis_title="Energy (keV)", yaxis_title="Counts per channel",
                       yaxis_type="log" if log_scale else "linear", template="plotly_dark")
-    overview_tab, peaks_tab, advanced_tab, detector_tab, interactions_tab, learning_tab, match_tab, calibration_tab, validation_tab, report_tab = st.tabs(
-        ["Spectrum", "Peak analysis", "Advanced fitting", "Detector physics", "Radiation interactions", "Learning lab", "Reference matching", "Calibration", "Validation", "Report"])
+    overview_tab, peaks_tab, advanced_tab, detector_tab, interactions_tab, decay_tab, learning_tab, match_tab, calibration_tab, validation_tab, report_tab = st.tabs(
+        ["Spectrum", "Peak analysis", "Advanced fitting", "Detector physics", "Radiation interactions", "Radioactive decay", "Learning lab", "Reference matching", "Calibration", "Validation", "Report"])
     with overview_tab:
         if isotope == "Overlapping demo" and upload is None and not enable_calibration:
             st.info("Zoomed to 450–540 keV. Orange vertical lines mark injected centers; dotted curves show each injected Gaussian component. The measured total can still have only one maximum. × markers show noisy local maxima.")
@@ -605,6 +606,54 @@ try:
                 "dσ/dΩ (barns/sr/electron)": kn_cross / 1e-24})
             st.download_button("Download Klein–Nishina CSV", kn_table.to_csv(index=False),
                 "klein_nishina.csv", "text/csv")
+    with decay_tab:
+        st.subheader("Radioactive decay and half-life simulator")
+        st.caption("Ideal exponential decay using approximate educational half-lives. Activity is a rate; it is not a radiation dose.")
+        decay_isotope = st.selectbox("Radionuclide", list(HALF_LIVES_YEARS), key="decay_isotope")
+        decay_half_life = HALF_LIVES_YEARS[decay_isotope]
+        decay_activity = st.number_input("Initial activity (Bq)", min_value=0.0,
+            value=1000.0, step=100.0, key="decay_activity")
+        decay_half_lives = st.slider("Elapsed time (half-lives)", 0.0, 10.0, 2.0,
+            step=0.25, key="decay_elapsed")
+        elapsed_years = decay_half_lives * decay_half_life
+        activity_now = remaining_activity(decay_activity, elapsed_years, decay_half_life)
+        d1, d2, d3 = st.columns(3)
+        d1.metric("Remaining activity", f"{activity_now:,.3g} Bq")
+        d2.metric("Remaining fraction", f"{100 * (1 - decay_fraction(elapsed_years, decay_half_life)):.2f}%")
+        d3.metric("Elapsed time", f"{elapsed_years:.4g} years")
+        decay_axis = np.linspace(0, 10, 201)
+        decay_curve = remaining_activity(decay_activity, decay_axis * decay_half_life, decay_half_life)
+        decay_fig = go.Figure()
+        decay_fig.add_trace(go.Scatter(x=decay_axis, y=decay_curve, mode="lines", name="Parent activity"))
+        decay_fig.add_vline(x=decay_half_lives, line_dash="dash")
+        decay_fig.update_layout(xaxis_title="Elapsed time (half-lives)",
+            yaxis_title="Activity (Bq)", template="plotly_dark", height=320)
+        st.plotly_chart(decay_fig, use_container_width=True)
+        decay_table = pd.DataFrame({"Elapsed half-lives": decay_axis,
+            "Elapsed years": decay_axis * decay_half_life, "Activity (Bq)": decay_curve})
+        st.download_button("Download decay curve CSV", decay_table.to_csv(index=False),
+            "radioactive_decay.csv", "text/csv")
+        with st.expander("Parent–daughter decay chain (idealized)", expanded=False):
+            st.caption("Two-step chain P → D → stable; daughter initially absent, 100% branching, no other pathways. Both curves show numbers of atoms, not activity.")
+            parent_hl = st.number_input("Parent half-life (arbitrary time units)",
+                min_value=0.01, value=4.0, key="chain_parent_hl")
+            daughter_hl = st.number_input("Daughter half-life (same units)",
+                min_value=0.01, value=1.0, key="chain_daughter_hl")
+            chain_time = np.linspace(0, 10 * max(parent_hl, daughter_hl), 301)
+            chain_parent, chain_daughter = parent_daughter_atoms(
+                1000, chain_time, parent_hl, daughter_hl)
+            chain_fig = go.Figure()
+            chain_fig.add_trace(go.Scatter(x=chain_time, y=chain_parent,
+                name="Parent atoms", mode="lines"))
+            chain_fig.add_trace(go.Scatter(x=chain_time, y=chain_daughter,
+                name="Daughter atoms", mode="lines"))
+            chain_fig.update_layout(xaxis_title="Time (arbitrary units)",
+                yaxis_title="Number of atoms", template="plotly_dark", height=320)
+            st.plotly_chart(chain_fig, use_container_width=True)
+            chain_table = pd.DataFrame({"Time": chain_time, "Parent atoms": chain_parent,
+                "Daughter atoms": chain_daughter})
+            st.download_button("Download decay chain CSV", chain_table.to_csv(index=False),
+                "parent_daughter_decay.csv", "text/csv")
     with learning_tab:
         st.subheader("Gamma-ray spectrum learning lab")
         st.caption("Session-only progress: it resets when the app session ends. Export your progress before leaving.")
