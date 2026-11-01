@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
 from gammaspec.identification import match_candidates
+from gammaspec.validation import benchmark, summary
 
 st.set_page_config(page_title="GammaSpec", page_icon="☢️", layout="wide")
 st.title("GammaSpec · Gamma-Ray Spectroscopy")
@@ -75,6 +76,14 @@ try:
             st.dataframe(candidates, use_container_width=True)
             st.download_button("Download candidates CSV", candidates.to_csv(index=False), "candidates.csv", "text/csv")
         st.caption("Candidate matching is not isotope identification. Missing lines, mixtures, calibration error and detector response can change results.")
+    with st.expander("Synthetic benchmark (v0.5)"):
+        st.caption("Regression against injected toy-model parameters, NOT validation against measured spectra.")
+        if st.button("Run benchmark"):
+            benchmark_results = benchmark(seed=int(seed), live_time_s=live_time)
+            metrics = summary(benchmark_results)
+            st.json(metrics)
+            st.dataframe(benchmark_results, use_container_width=True)
+            st.download_button("Download benchmark CSV", benchmark_results.to_csv(index=False), "benchmark.csv", "text/csv")
     st.download_button("Download spectrum CSV", spectrum.to_csv(index=False), "spectrum.csv", "text/csv")
 except (ValueError, KeyError) as exc:
     st.error(f"Could not process spectrum: {exc}")
