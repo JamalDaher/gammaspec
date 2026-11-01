@@ -25,6 +25,7 @@ from gammaspec.klein_nishina import differential_cross_section, angular_distribu
 from gammaspec.learning_lab import EXERCISES, check_answer, lab_example
 from gammaspec.learning_progress import CHALLENGES, grade_numeric, record_attempt, progress_summary, progress_csv
 from gammaspec.decay import HALF_LIVES_YEARS, remaining_activity, decay_fraction, parent_daughter_atoms
+from gammaspec.decay_chains import chain_populations, equilibrium_class
 import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
@@ -654,6 +655,47 @@ try:
                 "Daughter atoms": chain_daughter})
             st.download_button("Download decay chain CSV", chain_table.to_csv(index=False),
                 "parent_daughter_decay.csv", "text/csv")
+    with decay_tab:
+        with st.expander("Multi-generation decay chain explorer", expanded=False):
+            st.caption("Idealized sequential chain with branching to untracked stable products. Times and half-lives use the same arbitrary units.")
+            chain_generations = st.slider("Radioactive generations", 2, 5, 3, key="multi_chain_generations")
+            chain_half_lives = []
+            chain_branches = []
+            for i in range(chain_generations):
+                chain_half_lives.append(st.number_input(
+                    f"Generation {i + 1} half-life", min_value=0.01,
+                    value=float([100.0, 10.0, 1.0, 0.5, 0.25][i]),
+                    key=f"multi_chain_hl_{i}"))
+                if i < chain_generations - 1:
+                    chain_branches.append(st.slider(
+                        f"Fraction of generation {i + 1} decays feeding generation {i + 2}",
+                        0.0, 1.0, 1.0, 0.05, key=f"multi_chain_branch_{i}"))
+            chain_initial = st.number_input("Initial parent atoms", min_value=0.0,
+                value=1000.0, step=100.0, key="multi_chain_atoms")
+            chain_duration = st.slider("Time span (parent half-lives)", 0.5, 20.0,
+                8.0, 0.5, key="multi_chain_span")
+            chain_times = np.linspace(0, chain_duration * chain_half_lives[0], 201)
+            chain_pop, chain_activities = chain_populations(
+                chain_half_lives, chain_times, chain_initial, chain_branches)
+            chain_view = st.radio("Display", ["Atom populations", "Activities (decays per time unit)"],
+                horizontal=True, key="multi_chain_view")
+            chain_values = chain_pop if chain_view == "Atom populations" else chain_activities
+            multi_fig = go.Figure()
+            for i in range(chain_generations):
+                multi_fig.add_trace(go.Scatter(x=chain_times, y=chain_values[:, i],
+                    mode="lines", name=f"Generation {i + 1}"))
+            multi_fig.update_layout(xaxis_title="Time (arbitrary units)",
+                yaxis_title=chain_view, height=360)
+            st.plotly_chart(multi_fig, use_container_width=True)
+            st.info(equilibrium_class(chain_half_lives[0], chain_half_lives[1]))
+            st.caption("Equilibrium classification indicates a possible regime, not whether equilibrium has been reached. A branch below 100% reduces daughter feeding.")
+            multi_table = pd.DataFrame({"Time": chain_times})
+            for i in range(chain_generations):
+                multi_table[f"Generation {i + 1} atoms"] = chain_pop[:, i]
+                multi_table[f"Generation {i + 1} decays/time"] = chain_activities[:, i]
+            st.download_button("Download multi-generation chain CSV",
+                multi_table.to_csv(index=False), "multigeneration_decay_chain.csv",
+                "text/csv", key="multi_chain_csv")
     with learning_tab:
         st.subheader("Gamma-ray spectrum learning lab")
         st.caption("Session-only progress: it resets when the app session ends. Export your progress before leaving.")
