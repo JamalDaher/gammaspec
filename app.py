@@ -22,6 +22,7 @@ from gammaspec.efficiency import peak_efficiency, counting_statistics
 from gammaspec.attenuation import MATERIALS, linear_attenuation, transmission, attenuation_lengths
 from gammaspec.compton import scattered_energy, recoil_energy, compton_edge, scattered_wavelength_shift_pm
 from gammaspec.klein_nishina import differential_cross_section, angular_distribution, total_cross_section
+from gammaspec.learning_lab import EXERCISES, check_answer, lab_example
 import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
@@ -198,8 +199,8 @@ try:
         fig.update_xaxes(range=[450, 540])
     fig.update_layout(xaxis_title="Energy (keV)", yaxis_title="Counts per channel",
                       yaxis_type="log" if log_scale else "linear", template="plotly_dark")
-    overview_tab, peaks_tab, advanced_tab, detector_tab, interactions_tab, match_tab, calibration_tab, validation_tab, report_tab = st.tabs(
-        ["Spectrum", "Peak analysis", "Advanced fitting", "Detector physics", "Radiation interactions", "Reference matching", "Calibration", "Validation", "Report"])
+    overview_tab, peaks_tab, advanced_tab, detector_tab, interactions_tab, learning_tab, match_tab, calibration_tab, validation_tab, report_tab = st.tabs(
+        ["Spectrum", "Peak analysis", "Advanced fitting", "Detector physics", "Radiation interactions", "Learning lab", "Reference matching", "Calibration", "Validation", "Report"])
     with overview_tab:
         if isotope == "Overlapping demo" and upload is None and not enable_calibration:
             st.info("Zoomed to 450–540 keV. Orange vertical lines mark injected centers; dotted curves show each injected Gaussian component. The measured total can still have only one maximum. × markers show noisy local maxima.")
@@ -603,6 +604,25 @@ try:
                 "dσ/dΩ (barns/sr/electron)": kn_cross / 1e-24})
             st.download_button("Download Klein–Nishina CSV", kn_table.to_csv(index=False),
                 "klein_nishina.csv", "text/csv")
+    with learning_tab:
+        st.subheader("Gamma-ray spectrum learning lab")
+        st.caption("Five guided exercises covering source lines, counting statistics, detector resolution, Compton scattering, and attenuation.")
+        lab_topic = st.selectbox("Choose an exercise", list(EXERCISES), key="lab_topic")
+        lab_exercise = EXERCISES[lab_topic]
+        st.markdown(f"**Question:** {lab_exercise['prompt']}")
+        st.info(lab_example(lab_topic))
+        lab_choice = st.radio("Your answer", lab_exercise["choices"], index=None,
+                              key=f"lab_answer_{lab_topic}")
+        if st.button("Check answer", key="lab_check_answer", disabled=lab_choice is None):
+            st.session_state[f"lab_feedback_{lab_topic}"] = lab_choice
+        submitted = st.session_state.get(f"lab_feedback_{lab_topic}")
+        if submitted is not None:
+            if check_answer(lab_topic, submitted):
+                st.success("Correct!")
+            else:
+                st.warning(f"Not quite. The correct answer is: {lab_exercise['answer']}.")
+            st.markdown(lab_exercise["explanation"])
+        st.caption("Examples are illustrative. Exercises teach concepts, not radiation safety or isotope identification procedures.")
     candidates = None
     if match_enabled:
       with match_tab:
