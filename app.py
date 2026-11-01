@@ -34,6 +34,7 @@ with st.sidebar:
     match_enabled = st.toggle("Compare reference gamma lines", value=True)
     match_tolerance = st.slider("Line matching tolerance (keV)", 1, 30, 12)
     fit_window = st.slider("Fit half-window (keV)", 25, 90, 55)
+    peak_separation = st.slider("Minimum peak separation (keV)", 0, 100, 35)
     st.divider()
     upload = st.file_uploader("Import spectrum CSV or counts text", type=["csv", "txt"])
     if upload is not None:
@@ -68,7 +69,8 @@ try:
     fig = go.Figure(go.Scatter(x=spectrum.energy_kev, y=spectrum.counts, mode="lines", name="Counts"))
     fig.add_trace(go.Scatter(x=peaks.energy_kev, y=peaks.counts, mode="markers",
                              marker={"size": 9, "symbol": "x"}, name="Candidate peaks"))
-    fits = fit_detected_peaks(spectrum, prominence=prominence, half_window_kev=fit_window) if fit_enabled else None
+    fits = fit_detected_peaks(spectrum, prominence=prominence, half_window_kev=fit_window,
+                              min_separation_kev=peak_separation) if fit_enabled else None
     if fits is not None:
         for fit in fits.to_dict("records"):
             if fit.get("status") != "ok":
@@ -92,6 +94,7 @@ try:
       with peaks_tab:
         st.subheader("Gaussian photopeak fits")
         st.dataframe(fits, use_container_width=True)
+        st.caption("Quality flags: nominal, review_fit (large weighted residuals), possible_overlap, or fit_failed. Flags are heuristic.")
         st.caption("Uncertainties are approximate 1σ covariance estimates from weighted least squares; overlapping peaks may bias fits.")
         st.download_button("Download fit table CSV", fits.to_csv(index=False), "peak_fits.csv", "text/csv")
     if match_enabled:
