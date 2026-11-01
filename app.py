@@ -1,4 +1,10 @@
 """Launch with: streamlit run app.py"""
+from pathlib import Path
+import sys
+
+# Use this checkout rather than a potentially stale installed GammaSpec package.
+# This matters on hosted Streamlit deployments after source-only updates.
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 import plotly.graph_objects as go
 import streamlit as st
 from gammaspec.core import simulate_spectrum, find_photopeaks, read_spectrum
