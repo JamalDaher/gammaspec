@@ -171,9 +171,40 @@ try:
         st.download_button("Export spectrum CSV", spectrum.to_csv(index=False), "spectrum.csv", "text/csv")
     with peaks_tab:
         st.caption("Detection finds local maxima; fitting estimates model parameters. One detected maximum may contain multiple overlapping components.")
-        detected_tab, single_tab, double_tab = st.tabs(
-            ["Detected peaks", "Single-peak fits", "Two-component fit"]
+        comparison_tab, detected_tab, single_tab, double_tab = st.tabs(
+            ["Compare", "Detected peaks", "Single-peak fits", "Two-component fit"]
         )
+        with comparison_tab:
+            st.subheader("Peak energy comparison")
+            rows = []
+            for energy in peaks.energy_kev:
+                rows.append({"Method": "Detected maximum", "Energy (keV)": float(energy)})
+            if fits is not None and not fits.empty:
+                for fit in fits.to_dict("records"):
+                    if fit.get("status") == "ok":
+                        rows.append({"Method": "Single-Gaussian centroid", "Energy (keV)": float(fit["centroid_kev"])})
+            if overlap_result is not None:
+                for component in overlap_result["components"]:
+                    rows.append({"Method": "Two-component centroid", "Energy (keV)": float(component["centroid_kev"])})
+            if isotope == "Overlapping demo" and upload is None and not enable_calibration:
+                for energy in (485.0, 505.0):
+                    rows.append({"Method": "Injected demo center", "Energy (keV)": energy})
+            if rows:
+                comparison = pd.DataFrame(rows)
+                st.dataframe(comparison, use_container_width=True, hide_index=True)
+                comparison_fig = go.Figure()
+                for method, group in comparison.groupby("Method", sort=False):
+                    comparison_fig.add_trace(go.Scatter(
+                        x=group["Energy (keV)"], y=[method] * len(group),
+                        mode="markers", marker={"size": 12}, name=method))
+                comparison_fig.update_layout(xaxis_title="Energy (keV)",
+                                             template="plotly_dark", height=330)
+                st.plotly_chart(comparison_fig, use_container_width=True)
+                st.download_button("Download comparison CSV", comparison.to_csv(index=False),
+                                   "peak_comparison.csv", "text/csv")
+            else:
+                st.info("No detected or fitted peak energies to compare.")
+            st.caption("Detected maxima and fitted centroids are different quantities. Two fitted components do not establish two physical emissions.")
         with detected_tab:
             st.subheader("Detected local maxima")
             st.caption("These are noisy candidate maxima, not necessarily separate gamma emissions.")
