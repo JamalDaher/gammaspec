@@ -32,7 +32,15 @@ def chain_populations(half_lives, times, initial_atoms=1000.0, branches=None):
     initial = np.zeros(n)
     initial[0] = initial_atoms
     flat_times = np.atleast_1d(times).reshape(-1)
-    populations = np.stack([expm(matrix * t) @ initial for t in flat_times])
+    # A nearly repeated eigenvalue can cause cancellation in generic matrix
+    # exponential implementations. Use the stable two-member Bateman limit.
+    if n == 2 and abs(rates[1] - rates[0]) <= 1e-10 * max(rates):
+        parent = initial_atoms * np.exp(-rates[0] * flat_times)
+        daughter = (initial_atoms * branches[0] * rates[0] * flat_times
+                    * np.exp(-rates[0] * flat_times))
+        populations = np.column_stack((parent, daughter))
+    else:
+        populations = np.stack([expm(matrix * t) @ initial for t in flat_times])
     populations = np.maximum(populations, 0.0)
     activities = populations * rates
     if times.ndim == 0:
