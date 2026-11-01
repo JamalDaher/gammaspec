@@ -152,7 +152,7 @@ try:
         st.stop()
     restored_workspace = st.session_state.get("restored_workspace")
     if restored_workspace is not None:
-        spectrum = restored_workspace["spectrum"].copy()
+        # The archive contains the final energy axis. Disable the live sidebar\n        # calibration path so no undefined fit or second calibration is used.\n        enable_calibration = False\n        spectrum = restored_workspace["spectrum"].copy()
         restored_settings = restored_workspace["settings"]
         prominence = restored_settings["peak_prominence"]
         fit_window = restored_settings["fit_half_window_kev"]
