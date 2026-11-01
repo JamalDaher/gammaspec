@@ -52,38 +52,80 @@ def handle_peak_selection():
         st.session_state["overlap_fit_enabled"] = True
 
 
-st.set_page_config(page_title="GammaSpec", page_icon="☢️", layout="wide")
+st.set_page_config(page_title="GammaSpec | Spectroscopy Workbench", page_icon="☢️",
+                   layout="wide", initial_sidebar_state="expanded")
 st.markdown("""
 <style>
-/* Compact scientific workspace: avoid overflowing charts and long labels. */
-.block-container {padding-top: 1.5rem; padding-bottom: 2.5rem; max-width: 1500px;}
-[data-testid="stMetricValue"] {font-size: clamp(1.05rem, 2.3vw, 1.7rem);}
-[data-testid="stHorizontalBlock"] {flex-wrap: wrap;}
-[data-testid="stHorizontalBlock"] > div {min-width: min(100%, 170px);}
-[data-testid="stDataFrame"] {max-width: 100%;}
+:root { --gs-accent: #4db6ac; --gs-muted: #94a3b8; }
+.block-container { max-width: 1480px; padding: 1.3rem 2rem 3.5rem; }
+header[data-testid="stHeader"] { background: transparent; }
+[data-testid="stSidebar"] { border-right: 1px solid rgba(148,163,184,.16); }
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p { line-height: 1.5; }
+.gs-hero { padding: 1.45rem 1.7rem; border: 1px solid rgba(77,182,172,.25);
+  border-radius: 18px; background: linear-gradient(125deg,rgba(77,182,172,.13),rgba(99,102,241,.045) 70%);
+  margin: .2rem 0 1.15rem; }
+.gs-eyebrow { color: var(--gs-accent); font-size: .73rem; font-weight: 750;
+  letter-spacing: .15em; text-transform: uppercase; margin-bottom: .5rem; }
+.gs-hero h1 { font-size: clamp(2rem,3.2vw,3rem); font-weight: 760;
+  line-height: 1.1; letter-spacing: -.045em; margin: 0 0 .55rem; }
+.gs-hero p { color: var(--gs-muted); margin: 0; font-size: .96rem; max-width: 850px; }
+.gs-hero .gs-tags { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:1rem; }
+.gs-hero .gs-tag { padding:.25rem .6rem; border-radius:99px;
+  background:rgba(77,182,172,.10); border:1px solid rgba(77,182,172,.18);
+  font-size:.72rem; font-weight:600; }
+[data-testid="stMetric"] { border:1px solid rgba(148,163,184,.17); border-radius:12px;
+  padding:.75rem 1rem; background:rgba(148,163,184,.045); }
+[data-testid="stMetricLabel"] { font-size:.78rem; }
+[data-testid="stMetricValue"] { font-size:clamp(1.1rem,2.3vw,1.75rem); }
+[data-testid="stTabs"] [data-baseweb="tab-list"] { gap:.3rem; overflow-x:auto;
+  scrollbar-width:thin; padding:.4rem .2rem .65rem; border-bottom:1px solid rgba(148,163,184,.2); }
+[data-testid="stTabs"] button[data-baseweb="tab"] { white-space:nowrap;
+  border-radius:9px; padding:.45rem .8rem; font-weight:600; }
+[data-testid="stTabs"] button[aria-selected="true"] { background:rgba(77,182,172,.12); }
+[data-testid="stTabs"] [data-baseweb="tab-highlight"] { background-color:var(--gs-accent); }
+[data-testid="stExpander"] { border:1px solid rgba(148,163,184,.16);
+  border-radius:12px; overflow:hidden; }
+[data-testid="stDataFrame"], [data-testid="stPlotlyChart"] { max-width:100%; }
+[data-testid="stHorizontalBlock"] { flex-wrap:wrap; }
+[data-testid="stHorizontalBlock"] > div { min-width:min(100%,170px); }
+div.stDownloadButton button { border-radius:9px; }
+.gs-footnote { color:var(--gs-muted); font-size:.77rem; margin:.3rem 0 1rem; }
 @media (max-width: 640px) {
-    .block-container {padding: 1rem .7rem 2rem;}
-    h1 {font-size: 1.8rem !important;}
-    [data-testid="stPlotlyChart"] {max-width: 100%; overflow-x: auto;}
+ .block-container { padding: .8rem .7rem 2rem; }
+ .gs-hero { padding:1rem; border-radius:12px; }
+ .gs-hero h1 { font-size:1.85rem; }
+ [data-testid="stTabs"] button[data-baseweb="tab"] { font-size:.8rem; padding:.35rem .55rem; }
+ [data-testid="stPlotlyChart"] { overflow-x:auto; }
 }
 </style>
 """, unsafe_allow_html=True)
 st.title("GammaSpec")
-st.markdown("**Gamma-ray spectroscopy workbench** · Spectra, detector response and radiation interactions")
-st.caption("Use the tabs below to explore spectra, advanced fitting, detector physics and radiation interactions.")
-with st.expander("Explore GammaSpec capabilities", expanded=False):
+st.markdown("""
+<div class="gs-hero">
+  <div class="gs-eyebrow">Scientific analysis workspace</div>
+  <h1>GammaSpec <span style="color:#4db6ac">/</span> Spectroscopy</h1>
+  <p>Simulate, inspect, and analyze gamma-ray spectra with transparent
+  scientific methods, detector models, and reproducible experiment records.</p>
+  <div class="gs-tags"><span class="gs-tag">Spectrum analysis</span>
+  <span class="gs-tag">Detector physics</span>
+  <span class="gs-tag">Statistical methods</span>
+  <span class="gs-tag">Reproducible exports</span></div>
+</div>
+""", unsafe_allow_html=True)
+with st.expander("Explore GammaSpec capabilities · Start here", expanded=False):
     st.markdown("""
-    **Spectroscopy:** simulate or import spectra, detect peaks, fit Gaussian models and export results.
+    **1. Configure** a simulated source or import a measured spectrum in the sidebar.
 
-    **Advanced fitting:** compare statistical models, inspect residuals and run Monte Carlo studies.
+    **2. Explore** the Dashboard and Spectrum tabs, then choose a focused
+    analysis tab. The tab row scrolls horizontally on smaller screens.
 
-    **Detector physics:** explore illustrative resolution, efficiency and counting statistics.
+    **3. Preserve** your work using the Experiment notebook ZIP export,
+    or download a scientific report.
 
-    **Radiation interactions:** study attenuation, Compton scattering and Klein–Nishina distributions.
-
-    **Reproducibility:** download data and generate a self-contained analysis report.
+    **Interpretation:** All simulated examples are educational. Imported
+    measurements require independent calibration and validation.
     """)
-st.caption("Research and education prototype · Not for radiation safety, dosimetry, or authoritative isotope identification.")
+st.markdown('<div class="gs-footnote">Educational research prototype · Not for radiation safety, dosimetry, or certified isotope identification.</div>', unsafe_allow_html=True)
 with st.sidebar:
     st.header("Restore experiment")
     restore_upload = st.file_uploader("Experiment archive (.zip)", type=["zip"],
@@ -110,6 +152,7 @@ with st.sidebar:
         st.info("Restored archive active. Saved energy calibration is already reflected in the spectrum; it is not applied again.")
     st.divider()
     st.header("Workspace controls")
+    st.caption("Configure acquisition, fitting and calibration here. Scroll the analysis tabs to explore the workbench.")
     st.caption("Choose a source, then expand the settings you need.")
     isotope = st.selectbox("Source", ["Cs-137", "Co-60", "Background", "Overlapping demo"])
     with st.expander("Acquisition", expanded=True):
@@ -178,7 +221,7 @@ try:
     st.divider()
     source_label = (restored_workspace["record"]["dataset"] if restored_workspace is not None
                     else upload.name if upload else f"Synthetic {isotope}")
-    st.subheader("Workspace")
+    st.subheader("Current spectrum")
     metrics = st.columns(4)
     metrics[0].metric("Dataset", source_label)
     metrics[1].metric("Channels", f"{len(spectrum):,}")
