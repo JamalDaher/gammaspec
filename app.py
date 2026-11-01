@@ -31,6 +31,7 @@ from gammaspec.comparison import compare_spectra, comparison_metrics
 from gammaspec.matching_workbench import rank_reference_candidates
 from gammaspec.calibration_workbench import calibration_diagnostics, measured_resolution_table
 from gammaspec.notebook import create_experiment_record, notebook_json, load_notebook_json
+from gammaspec.project_archive import export_experiment_archive, import_experiment_archive
 import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
@@ -997,9 +998,33 @@ try:
             st.download_button("Download experiment notebook JSON",
                 notebook_json(notebook_record), "gammaspec_experiment.json",
                 "application/json", key="notebook_export")
-            st.caption("The export stores configuration, notes and summary metrics, not raw spectrum channel data. Export the spectrum CSV separately for complete reproducibility.")
+            st.caption("The JSON notebook stores configuration, notes and summary metrics, but not raw channel data.")
+            st.download_button("Download complete experiment archive (.zip)",
+                export_experiment_archive(notebook_record, spectrum),
+                "gammaspec_experiment.zip", "application/zip", key="project_archive_export")
+            st.caption("The archive includes the full spectrum CSV, notebook metadata and a SHA-256 integrity manifest. Save this file to preserve the experiment.")
+
         except ValueError as exc:
             st.warning(f"Notebook entry invalid: {exc}")
+        st.divider()
+        st.markdown("**Open a complete experiment archive**")
+        archive_upload = st.file_uploader("Import GammaSpec experiment ZIP",
+            type=["zip"], key="project_archive_import")
+        if archive_upload is not None:
+            try:
+                archived_record, archived_spectrum, archive_manifest = import_experiment_archive(
+                    archive_upload.getvalue())
+                st.success("Archive integrity checks passed.")
+                st.caption(f"Created with GammaSpec {archive_manifest['software_version']}; {len(archived_spectrum):,} spectrum channels.")
+                st.json(archived_record)
+                st.dataframe(archived_spectrum.head(25), use_container_width=True,
+                    hide_index=True)
+                st.download_button("Download restored spectrum CSV",
+                    archived_spectrum.to_csv(index=False), "restored_spectrum.csv",
+                    "text/csv", key="restored_spectrum_export")
+                st.info("The imported archive is reviewed without changing the active workspace. For reanalysis, import its spectrum CSV using the sidebar and reapply the recorded settings.")
+            except (ValueError, UnicodeDecodeError) as exc:
+                st.error(f"Could not import archive: {exc}")
         st.divider()
         st.markdown("**Review an exported notebook**")
         notebook_upload = st.file_uploader("Open experiment notebook JSON",
