@@ -41,49 +41,76 @@ def handle_peak_selection():
 
 
 st.set_page_config(page_title="GammaSpec", page_icon="☢️", layout="wide")
+st.markdown("""
+<style>
+/* Compact scientific workspace: avoid overflowing charts and long labels. */
+.block-container {padding-top: 1.5rem; padding-bottom: 2.5rem; max-width: 1500px;}
+[data-testid="stMetricValue"] {font-size: clamp(1.05rem, 2.3vw, 1.7rem);}
+[data-testid="stHorizontalBlock"] {flex-wrap: wrap;}
+[data-testid="stHorizontalBlock"] > div {min-width: min(100%, 170px);}
+[data-testid="stDataFrame"] {max-width: 100%;}
+@media (max-width: 640px) {
+    .block-container {padding: 1rem .7rem 2rem;}
+    h1 {font-size: 1.8rem !important;}
+    [data-testid="stPlotlyChart"] {max-width: 100%; overflow-x: auto;}
+}
+</style>
+""", unsafe_allow_html=True)
 st.title("GammaSpec")
 st.markdown("**Gamma-ray spectroscopy workbench** · Spectra, detector response and radiation interactions")
-st.caption("Use the navigation tabs to move between spectrum analysis, advanced fitting, detector physics and radiation interactions.")
+st.caption("Use the tabs below to explore spectra, advanced fitting, detector physics and radiation interactions.")
+with st.expander("Explore GammaSpec capabilities", expanded=False):
+    st.markdown("""
+    **Spectroscopy:** simulate or import spectra, detect peaks, fit Gaussian models and export results.
+
+    **Advanced fitting:** compare statistical models, inspect residuals and run Monte Carlo studies.
+
+    **Detector physics:** explore illustrative resolution, efficiency and counting statistics.
+
+    **Radiation interactions:** study attenuation, Compton scattering and Klein–Nishina distributions.
+
+    **Reproducibility:** download data and generate a self-contained analysis report.
+    """)
 st.caption("Research and education prototype · Not for radiation safety, dosimetry, or authoritative isotope identification.")
 with st.sidebar:
-    st.header("Acquisition")
+    st.header("Workspace controls")
+    st.caption("Choose a source, then expand the settings you need.")
     isotope = st.selectbox("Source", ["Cs-137", "Co-60", "Background", "Overlapping demo"])
+    with st.expander("Acquisition", expanded=True):
+        live_time = st.slider("Live time (s)", 10, 300, 60)
+        seed = st.number_input("Random seed", min_value=0, value=42)
+        prominence = st.slider("Peak prominence", 10, 300, 150)
+        log_scale = st.toggle("Logarithmic counts")
+    with st.expander("Import spectrum", expanded=False):
+        upload = st.file_uploader("Import spectrum CSV or counts text", type=["csv", "txt"])
+        if upload is not None:
+            import_format = st.selectbox("Import format", ["auto", "csv", "counts"])
+            channel_width = st.number_input("Energy scale (keV/channel) for uncalibrated files", min_value=0.001, value=0.8)
+            energy_offset = st.number_input("Energy offset (keV)", value=0.0)
+    with st.expander("Peak analysis settings", expanded=False):
+        fit_enabled = st.toggle("Fit candidate photopeaks", value=True)
+        match_enabled = st.toggle("Compare reference gamma lines", value=True)
+        match_tolerance = st.slider("Line matching tolerance (keV)", 1, 30, 12)
+        fit_window = st.slider("Fit half-window (keV)", 25, 90, 55)
+        peak_separation = st.slider("Minimum peak separation (keV)", 0, 100, 35)
+    with st.expander("Overlapping peaks (experimental)", expanded=False):
+        if isotope == "Overlapping demo":
+            st.caption("Synthetic example: peaks at 485 and 505 keV; not an isotope.")
+        overlap_enabled = st.toggle("Fit two overlapping peaks", value=isotope == "Overlapping demo", key="overlap_fit_enabled")
+        if overlap_enabled:
+            overlap_center_1 = st.number_input("First peak center (keV)", min_value=0.0, value=485.0, key="overlap_center_1")
+            overlap_center_2 = st.number_input("Second peak center (keV)", min_value=0.0, value=505.0, key="overlap_center_2")
+            overlap_window = st.slider("Two-peak half-window (keV)", 10, 100, 35)
+    with st.expander("Energy calibration", expanded=False):
+        enable_calibration = st.toggle("Apply channel calibration")
+        calibration_degree = st.selectbox("Polynomial degree", [1, 2])
+        default_refs = "100,80\n500,400\n1000,800\n1500,1200" if calibration_degree == 1 else "100,80\n400,320\n700,560\n1000,800"
+        calibration_csv = st.text_area("Reference pairs: channel,energy_keV", default_refs, height=110)
     with st.expander("Deployment diagnostics"):
         st.code(f"Loaded core: {gammaspec_core.__file__}\\nAvailable sources: {list(gammaspec_core.LINES)}")
         if "Overlapping demo" not in gammaspec_core.LINES:
             st.error("Running GammaSpec core is outdated. Confirm deployment branch is main and reboot/redeploy.")
-    live_time = st.slider("Live time (s)", 10, 300, 60)
-    seed = st.number_input("Random seed", min_value=0, value=42)
-    prominence = st.slider("Peak prominence", 10, 300, 150)
-    log_scale = st.toggle("Logarithmic counts")
-    st.divider()
-    st.subheader("Calibration settings")
-    enable_calibration = st.toggle("Apply channel calibration")
-    calibration_degree = st.selectbox("Polynomial degree", [1, 2])
-    default_refs = "100,80\n500,400\n1000,800\n1500,1200" if calibration_degree == 1 else "100,80\n400,320\n700,560\n1000,800"
-    calibration_csv = st.text_area("Reference pairs: channel,energy_keV", default_refs, height=110)
-    st.divider()
-    st.subheader("Analysis settings")
-    fit_enabled = st.toggle("Fit candidate photopeaks", value=True)
-    match_enabled = st.toggle("Compare reference gamma lines", value=True)
-    match_tolerance = st.slider("Line matching tolerance (keV)", 1, 30, 12)
-    fit_window = st.slider("Fit half-window (keV)", 25, 90, 55)
-    peak_separation = st.slider("Minimum peak separation (keV)", 0, 100, 35)
-    st.divider()
-    st.subheader("Overlapping peaks (experimental)")
-    if isotope == "Overlapping demo":
-        st.caption("Synthetic example: peaks at 485 and 505 keV; not an isotope.")
-    overlap_enabled = st.toggle("Fit two overlapping peaks", value=isotope == "Overlapping demo", key="overlap_fit_enabled")
-    if overlap_enabled:
-        overlap_center_1 = st.number_input("First peak center (keV)", min_value=0.0, value=485.0, key="overlap_center_1")
-        overlap_center_2 = st.number_input("Second peak center (keV)", min_value=0.0, value=505.0, key="overlap_center_2")
-        overlap_window = st.slider("Two-peak half-window (keV)", 10, 100, 35)
-    st.divider()
-    upload = st.file_uploader("Import spectrum CSV or counts text", type=["csv", "txt"])
-    if upload is not None:
-        import_format = st.selectbox("Import format", ["auto", "csv", "counts"])
-        channel_width = st.number_input("Energy scale (keV/channel) for uncalibrated files", min_value=0.001, value=0.8)
-        energy_offset = st.number_input("Energy offset (keV)", value=0.0)
+
 try:
     if not upload and isotope not in (*gammaspec_core.LINES, "Background"):
         st.error(f"Selected source {isotope!r} is unavailable in the loaded GammaSpec core. See Deployment diagnostics in the sidebar.")
@@ -209,7 +236,7 @@ try:
                         x=group["Energy (keV)"], y=[method] * len(group),
                         mode="markers", marker={"size": 12}, name=method))
                 comparison_fig.update_layout(xaxis_title="Energy (keV)",
-                                             template="plotly_dark", height=330)
+                                             template="plotly_dark", height=320)
                 st.plotly_chart(comparison_fig, use_container_width=True)
                 st.download_button("Download comparison CSV", comparison.to_csv(index=False),
                                    "peak_comparison.csv", "text/csv")
@@ -280,7 +307,7 @@ try:
                     residual_fig.update_layout(
                         xaxis_title="Energy (keV)",
                         yaxis_title="Standardized residual",
-                        template="plotly_dark", height=340,
+                        template="plotly_dark", height=320,
                     )
                     st.plotly_chart(residual_fig, use_container_width=True)
                     col1, col2 = st.columns(2)
@@ -500,7 +527,7 @@ try:
                     mode="lines", name=mat))
             attenuation_fig.update_layout(xaxis_title="Thickness (cm)",
                 yaxis_title="Uncollided transmission (%)", yaxis_type="log",
-                template="plotly_dark", height=340)
+                template="plotly_dark", height=320)
             st.plotly_chart(attenuation_fig, use_container_width=True)
             shield_table = pd.DataFrame([
                 {"Material": mat, "Density (g/cm³)": MATERIALS[mat][0],
@@ -541,7 +568,7 @@ try:
                 y=recoil_energy(compton_energy, compton_angles), name="Recoil electron"))
             compton_fig.add_vline(x=compton_angle, line_dash="dash")
             compton_fig.update_layout(xaxis_title="Photon scattering angle (degrees)",
-                yaxis_title="Energy (keV)", template="plotly_dark", height=340)
+                yaxis_title="Energy (keV)", template="plotly_dark", height=320)
             st.plotly_chart(compton_fig, use_container_width=True)
             st.caption(f"Wavelength shift at selected angle: {scattered_wavelength_shift_pm(compton_angle):.3f} pm. The Compton edge is the maximum energy transfer to one electron, not the full measured continuum shape.")
             compton_table = pd.DataFrame({"Angle (degrees)": compton_angles,
@@ -562,7 +589,7 @@ try:
                 kn_fig.add_trace(go.Scatter(x=angles, y=density,
                     name=f"{energy:g} keV", mode="lines"))
             kn_fig.update_layout(xaxis_title="Photon scattering angle (degrees)",
-                yaxis_title="Probability density (per degree)", template="plotly_dark", height=340)
+                yaxis_title="Probability density (per degree)", template="plotly_dark", height=320)
             st.plotly_chart(kn_fig, use_container_width=True)
             st.caption("Angular probability includes the sin(θ) solid-angle factor. A zero probability density at 0° does not mean the forward differential cross section vanishes.")
             kn_fig2 = go.Figure()
