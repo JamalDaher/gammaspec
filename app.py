@@ -13,6 +13,7 @@ from gammaspec.fitting import fit_detected_peaks, gaussian_background
 from gammaspec.overlap import fit_overlapping_peaks, double_gaussian_background
 from gammaspec.selection import selected_peak_energies
 from gammaspec.residuals import residual_comparison, residual_rms
+from gammaspec.model_selection import compare_information_criteria
 import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
@@ -249,6 +250,23 @@ try:
                     st.caption("Lower RMS indicates smaller residuals on this window, but the models have different numbers of parameters and may have been fitted on different windows. This is not a formal statistical model-selection test.")
                 except (ValueError, KeyError) as exc:
                     st.warning(f"Residual comparison unavailable: {exc}")
+        with st.expander("AIC / BIC model comparison", expanded=False):
+            st.caption("Both models are evaluated on the same channels. The single Gaussian is refitted in the two-component fit window.")
+            if overlap_result is None:
+                st.info("Enable the two-component fit to compare the one- and two-Gaussian models.")
+            else:
+                try:
+                    scores = compare_information_criteria(
+                        spectrum, overlap_result,
+                        (overlap_center_1, overlap_center_2), overlap_window
+                    )
+                    st.dataframe(scores.round(3), use_container_width=True, hide_index=True)
+                    st.caption("Lower AIC/BIC is preferred under this approximate Gaussian weighted-residual model. Δ values are relative to the lowest score. These are not p-values, and do not prove two physical gamma emissions.")
+                    st.caption("AIC/BIC assume the fitted likelihood and effective sample count are appropriate; the current weighting and Gaussian approximation limit scientific interpretation.")
+                    st.download_button("Download AIC/BIC CSV", scores.to_csv(index=False),
+                                       "model_comparison.csv", "text/csv")
+                except (ValueError, KeyError) as exc:
+                    st.warning(f"Model comparison unavailable: {exc}")
         with detected_tab:
             st.subheader("Detected local maxima")
             st.caption("These are noisy candidate maxima, not necessarily separate gamma emissions.")
