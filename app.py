@@ -21,6 +21,7 @@ from gammaspec.detector_resolution import fwhm_kev, resolution_percent, illustra
 from gammaspec.efficiency import peak_efficiency, counting_statistics
 from gammaspec.attenuation import MATERIALS, linear_attenuation, transmission, attenuation_lengths
 from gammaspec.compton import scattered_energy, recoil_energy, compton_edge, scattered_wavelength_shift_pm
+from gammaspec.klein_nishina import differential_cross_section, angular_distribution, total_cross_section
 import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
@@ -506,6 +507,33 @@ try:
                 "Recoil electron (keV)": recoil_energy(compton_energy, compton_angles)})
             st.download_button("Download Compton kinematics CSV",
                 compton_table.to_csv(index=False), "compton_kinematics.csv", "text/csv")
+        with st.expander("Klein–Nishina scattering analysis", expanded=False):
+            st.caption("Unpolarized photons scattered by free electrons initially at rest. Differential cross sections are per electron, not a material attenuation model.")
+            kn_energy = st.selectbox("Incident photon energy (keV)",
+                [100.0, 511.0, 661.657, 1173.228, 1332.492], index=2, key="kn_energy")
+            kn_angles, kn_density, kn_cross = angular_distribution(kn_energy)
+            kn_total = total_cross_section(kn_energy)
+            st.metric("Integrated cross section", f"{kn_total / 1e-24:.4f} barns/electron")
+            kn_fig = go.Figure()
+            for energy in (100.0, 661.657, 1332.492):
+                angles, density, _ = angular_distribution(energy)
+                kn_fig.add_trace(go.Scatter(x=angles, y=density,
+                    name=f"{energy:g} keV", mode="lines"))
+            kn_fig.update_layout(xaxis_title="Photon scattering angle (degrees)",
+                yaxis_title="Probability density (per degree)", template="plotly_dark", height=340)
+            st.plotly_chart(kn_fig, use_container_width=True)
+            st.caption("Angular probability includes the sin(θ) solid-angle factor. A zero probability density at 0° does not mean the forward differential cross section vanishes.")
+            kn_fig2 = go.Figure()
+            kn_fig2.add_trace(go.Scatter(x=kn_angles, y=kn_cross / 1e-24,
+                name="Differential cross section", mode="lines"))
+            kn_fig2.update_layout(xaxis_title="Photon scattering angle (degrees)",
+                yaxis_title="dσ/dΩ (barns/sr/electron)", template="plotly_dark", height=320)
+            st.plotly_chart(kn_fig2, use_container_width=True)
+            kn_table = pd.DataFrame({"Angle (degrees)": kn_angles,
+                "Probability density (per degree)": kn_density,
+                "dσ/dΩ (barns/sr/electron)": kn_cross / 1e-24})
+            st.download_button("Download Klein–Nishina CSV", kn_table.to_csv(index=False),
+                "klein_nishina.csv", "text/csv")
         with detected_tab:
             st.subheader("Detected local maxima")
             st.caption("These are noisy candidate maxima, not necessarily separate gamma emissions.")
