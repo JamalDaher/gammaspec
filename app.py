@@ -20,6 +20,7 @@ from gammaspec.resolution import resolution_study, summarize_resolution
 from gammaspec.detector_resolution import fwhm_kev, resolution_percent, illustrative_doublet
 from gammaspec.efficiency import peak_efficiency, counting_statistics
 from gammaspec.attenuation import MATERIALS, linear_attenuation, transmission, attenuation_lengths
+from gammaspec.compton import scattered_energy, recoil_energy, compton_edge, scattered_wavelength_shift_pm
 import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
@@ -469,6 +470,42 @@ try:
             st.download_button("Download attenuation comparison CSV",
                 shield_table.to_csv(index=False), "attenuation_comparison.csv", "text/csv")
             st.caption("Beer–Lambert uncollided photon transmission only; scattered radiation, buildup, geometry, secondary radiation, mixtures and detector response are omitted. Coefficients are intentionally illustrative and must not be used for exposure or shielding decisions.")
+        with st.expander("Compton scattering explorer", expanded=False):
+            st.caption("Ideal scattering from a free electron initially at rest; excludes binding effects and detector response.")
+            compton_source = st.selectbox("Gamma-ray line", ["Cs-137 (661.657 keV)",
+                "Co-60 (1173.228 keV)", "Co-60 (1332.492 keV)", "Custom"],
+                key="compton_source")
+            compton_default = {"Cs-137 (661.657 keV)": 661.657,
+                "Co-60 (1173.228 keV)": 1173.228,
+                "Co-60 (1332.492 keV)": 1332.492}
+            compton_energy = (st.number_input("Incident energy (keV)", min_value=1.0,
+                max_value=10000.0, value=662.0, key="compton_custom_energy")
+                if compton_source == "Custom" else compton_default[compton_source])
+            compton_angle = st.slider("Photon scattering angle (degrees)", 0, 180, 90,
+                                      key="compton_angle")
+            scattered = scattered_energy(compton_energy, compton_angle)
+            recoil = recoil_energy(compton_energy, compton_angle)
+            edge = compton_edge(compton_energy)
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Scattered photon", f"{scattered:.2f} keV")
+            c2.metric("Recoil electron", f"{recoil:.2f} keV")
+            c3.metric("Compton edge", f"{edge:.2f} keV")
+            compton_angles = np.linspace(0, 180, 181)
+            compton_fig = go.Figure()
+            compton_fig.add_trace(go.Scatter(x=compton_angles,
+                y=scattered_energy(compton_energy, compton_angles), name="Scattered photon"))
+            compton_fig.add_trace(go.Scatter(x=compton_angles,
+                y=recoil_energy(compton_energy, compton_angles), name="Recoil electron"))
+            compton_fig.add_vline(x=compton_angle, line_dash="dash")
+            compton_fig.update_layout(xaxis_title="Photon scattering angle (degrees)",
+                yaxis_title="Energy (keV)", template="plotly_dark", height=340)
+            st.plotly_chart(compton_fig, use_container_width=True)
+            st.caption(f"Wavelength shift at selected angle: {scattered_wavelength_shift_pm(compton_angle):.3f} pm. The Compton edge is the maximum energy transfer to one electron, not the full measured continuum shape.")
+            compton_table = pd.DataFrame({"Angle (degrees)": compton_angles,
+                "Scattered photon (keV)": scattered_energy(compton_energy, compton_angles),
+                "Recoil electron (keV)": recoil_energy(compton_energy, compton_angles)})
+            st.download_button("Download Compton kinematics CSV",
+                compton_table.to_csv(index=False), "compton_kinematics.csv", "text/csv")
         with detected_tab:
             st.subheader("Detected local maxima")
             st.caption("These are noisy candidate maxima, not necessarily separate gamma emissions.")
