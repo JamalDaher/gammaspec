@@ -7,6 +7,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 import plotly.graph_objects as go
 import streamlit as st
+from gammaspec import core as gammaspec_core
 from gammaspec.core import simulate_spectrum, find_photopeaks, read_spectrum
 from gammaspec.fitting import fit_detected_peaks, gaussian_background
 from gammaspec.overlap import fit_overlapping_peaks, double_gaussian_background
@@ -25,6 +26,10 @@ st.caption("Research and education prototype · Not for radiation safety, dosime
 with st.sidebar:
     st.header("Acquisition")
     isotope = st.selectbox("Source", ["Cs-137", "Co-60", "Background", "Overlapping demo"])
+    with st.expander("Deployment diagnostics"):
+        st.code(f"Loaded core: {gammaspec_core.__file__}\\nAvailable sources: {list(gammaspec_core.LINES)}")
+        if "Overlapping demo" not in gammaspec_core.LINES:
+            st.error("Running GammaSpec core is outdated. Confirm deployment branch is main and reboot/redeploy.")
     live_time = st.slider("Live time (s)", 10, 300, 60)
     seed = st.number_input("Random seed", min_value=0, value=42)
     prominence = st.slider("Peak prominence", 10, 300, 150)
@@ -58,6 +63,9 @@ with st.sidebar:
         channel_width = st.number_input("Energy scale (keV/channel) for uncalibrated files", min_value=0.001, value=0.8)
         energy_offset = st.number_input("Energy offset (keV)", value=0.0)
 try:
+    if not upload and isotope not in (*gammaspec_core.LINES, "Background"):
+        st.error(f"Selected source {isotope!r} is unavailable in the loaded GammaSpec core. See Deployment diagnostics in the sidebar.")
+        st.stop()
     spectrum = (import_spectrum_text(upload.getvalue(), format=import_format,
                 energy_per_channel_kev=channel_width, energy_offset_kev=energy_offset)
                 if upload else simulate_spectrum(isotope, live_time_s=live_time, seed=int(seed)))
