@@ -2,7 +2,7 @@
 
 Educational, open-source gamma-ray spectroscopy simulator and spectrum viewer.
 
-## Features (v0.5)
+## Features (v0.6)
 - Seeded Poisson simulation of illustrative Cs-137, Co-60 and background spectra
 - Interactive Plotly chart with logarithmic scale option
 - Candidate peak detection using SciPy prominence
@@ -11,6 +11,7 @@ Educational, open-source gamma-ray spectroscopy simulator and spectrum viewer.
 - Linear/quadratic energy calibration, reference residuals and approximate fit uncertainty
 - Educational reference-line candidate matching for Cs-137, Co-60, Na-22, K-40 and Am-241
 - Reproducible synthetic regression benchmarks for fitted centroids, FWHM and reference matching
+- Text-based measured-spectrum import (CSV or one-count-per-line) with validation and explicit energy scale
 - Automated pytest suite and GitHub Actions CI
 
 ## Quick start
@@ -33,7 +34,7 @@ Synthetic peaks use Gaussian profiles with illustrative amplitudes and widths pl
 - v0.3: channel-to-energy calibration and approximate fit uncertainty (implemented)
 - v0.4: small reference line library and candidate matching (implemented)
 - v0.5: reproducible synthetic regression benchmark (implemented)
-- Next: measured-spectrum validation against documented public datasets (not yet performed)
+- v0.6: text-based spectrum import (implemented); independent measured-spectrum validation remains outstanding
 - Later: detector data adapters and efficiency calibration
 
 ## License
