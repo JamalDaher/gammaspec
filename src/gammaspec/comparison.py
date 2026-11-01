@@ -1,6 +1,7 @@
 """Comparisons on a shared energy grid, with explicit normalization semantics."""
 import numpy as np
 import pandas as pd
+from scipy.integrate import trapezoid
 from .core import _validate
 
 def compare_spectra(primary, secondary, *, normalization="area", points=500):
@@ -34,8 +35,8 @@ def compare_spectra(primary, secondary, *, normalization="area", points=500):
         return np.interp(grid, energy, counts / widths)
     a, b = density(primary), density(secondary)
     if normalization == "area":
-        a_area = np.trapezoid(a, grid)
-        b_area = np.trapezoid(b, grid)
+        a_area = trapezoid(a, grid)
+        b_area = trapezoid(b, grid)
         if a_area <= 0 or b_area <= 0:
             raise ValueError("Area normalization requires nonzero counts in both spectra")
         a, b = a / a_area, b / b_area
