@@ -1,8 +1,12 @@
 # GammaSpec
 
+[![Launch Live Demo](https://img.shields.io/badge/Launch-Live%20Demo-FF4B4B?logo=streamlit&logoColor=white)](https://gammaspec-jdaher.streamlit.app/)
+
+**[Try GammaSpec in your browser](https://gammaspec-jdaher.streamlit.app/)** — no local installation required.
+
 Educational, open-source gamma-ray spectroscopy simulator and spectrum viewer.
 
-## Features (v1.0 release candidate)
+## Features (v1.0)
 - Seeded Poisson simulation of illustrative Cs-137, Co-60 and background spectra
 - Interactive Plotly chart with logarithmic scale option
 - Candidate peak detection using SciPy prominence
@@ -12,14 +16,14 @@ Educational, open-source gamma-ray spectroscopy simulator and spectrum viewer.
 - Educational reference-line candidate matching for Cs-137, Co-60, Na-22, K-40 and Am-241
 - Reproducible synthetic regression benchmarks for fitted centroids, FWHM and reference matching
 - Text-based measured-spectrum import (CSV or one-count-per-line) with validation and explicit energy scale
-- Five-tab analysis workspace with acquisition metrics, grouped controls and export actions
+- Six-tab analysis workspace with acquisition metrics, grouped controls and export actions
 - Downloadable, printable self-contained HTML reports with spectrum chart, fits and reference matches
 - Peak candidate deduplication, reduced chi-square diagnostics and heuristic overlap flags
 - Automated pytest suite and GitHub Actions CI
 
 ## Project status
 
-**v1.0 is an educational software release candidate, not a validated radiation measurement system.** See [release checklist](docs/RELEASE_CHECKLIST.md) and [validation status](docs/VALIDATION.md). Screenshots and live demo are not yet verified; no unverified links are advertised.
+**v1.0 is an educational software milestone, not a validated radiation measurement system.** The [live demo](https://gammaspec-jdaher.streamlit.app/) has been deployed and tested by the project owner. See the [release checklist](docs/RELEASE_CHECKLIST.md) and [validation status](docs/VALIDATION.md). Screenshots have not yet been added.
 
 ## Quick start
 Requires Python 3.10 or later.
