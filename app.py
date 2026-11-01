@@ -16,6 +16,7 @@ from gammaspec.residuals import residual_comparison, residual_rms
 from gammaspec.model_selection import compare_information_criteria
 from gammaspec.poisson import compare_poisson_models
 from gammaspec.monte_carlo import monte_carlo_recovery, recovery_summary
+from gammaspec.resolution import resolution_study, summarize_resolution
 import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
@@ -325,6 +326,45 @@ try:
                 st.download_button("Download Monte Carlo trials CSV", mc_results.to_csv(index=False),
                                    "monte_carlo_recovery.csv", "text/csv")
                 st.caption("Simulation study only. Failed fits are excluded from bias/SD, so estimates may be selection-biased. Empirical SD is not a confidence interval or measurement uncertainty for uploaded data.")
+        with st.expander("Peak resolution study", expanded=False):
+            st.caption("Vary injected peak separation around 495 keV, resimulate Poisson counts, and measure centroid recovery.")
+            rs_trials = st.slider("Trials per separation", 2, 15, 4, key="rs_trials")
+            rs_time = st.slider("Resolution study live time (s)", 10, 300, 60, key="rs_time")
+            rs_tol = st.slider("Recovery tolerance (keV)", 1, 15, 5, key="rs_tol")
+            if st.button("Run separation sweep", key="run_resolution"):
+                with st.spinner("Running independent simulations and fits..."):
+                    try:
+                        st.session_state["resolution_trials"] = resolution_study(
+                            trials=rs_trials, live_time_s=rs_time, tolerance_kev=rs_tol
+                        )
+                        st.session_state["resolution_settings"] = (rs_trials, rs_time, rs_tol)
+                    except ValueError as exc:
+                        st.warning(f"Resolution study unavailable: {exc}")
+            trial_results = st.session_state.get("resolution_trials")
+            if trial_results is not None:
+                if st.session_state.get("resolution_settings") != (rs_trials, rs_time, rs_tol):
+                    st.info("Results use earlier settings; rerun to refresh.")
+                resolution_table = summarize_resolution(trial_results)
+                st.dataframe(resolution_table, use_container_width=True, hide_index=True)
+                resolution_fig = go.Figure()
+                resolution_fig.add_trace(go.Scatter(
+                    x=resolution_table.separation_kev, y=resolution_table.recovery_rate,
+                    mode="lines+markers", name="Accurate recovery fraction"))
+                resolution_fig.add_trace(go.Scatter(
+                    x=resolution_table.separation_kev, y=resolution_table.success_rate,
+                    mode="lines+markers", name="Fit convergence fraction"))
+                resolution_fig.update_layout(xaxis_title="Injected separation (keV)",
+                                             yaxis_title="Fraction of trials",
+                                             yaxis_range=[0, 1.05], template="plotly_dark",
+                                             height=340)
+                st.plotly_chart(resolution_fig, use_container_width=True)
+                st.download_button("Download separation summary CSV",
+                                   resolution_table.to_csv(index=False),
+                                   "resolution_summary.csv", "text/csv")
+                st.download_button("Download all separation trials CSV",
+                                   trial_results.to_csv(index=False),
+                                   "resolution_trials.csv", "text/csv")
+                st.caption("Accurate recovery requires both fitted centroids within the selected tolerance of known injected centers. Seeded fits and this success criterion do not establish that peaks are independently detectable; small trial counts give noisy estimates.")
         with detected_tab:
             st.subheader("Detected local maxima")
             st.caption("These are noisy candidate maxima, not necessarily separate gamma emissions.")
