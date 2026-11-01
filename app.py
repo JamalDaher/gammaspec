@@ -26,6 +26,7 @@ from gammaspec.learning_lab import EXERCISES, check_answer, lab_example
 from gammaspec.learning_progress import CHALLENGES, grade_numeric, record_attempt, progress_summary, progress_csv
 from gammaspec.decay import HALF_LIVES_YEARS, remaining_activity, decay_fraction, parent_daughter_atoms
 from gammaspec.decay_chains import chain_populations, equilibrium_class
+from gammaspec.dashboard import build_results_summary, summary_csv, summary_json
 import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
@@ -202,8 +203,34 @@ try:
         fig.update_xaxes(range=[450, 540])
     fig.update_layout(xaxis_title="Energy (keV)", yaxis_title="Counts per channel",
                       yaxis_type="log" if log_scale else "linear", template="plotly_dark")
-    overview_tab, peaks_tab, advanced_tab, detector_tab, interactions_tab, decay_tab, learning_tab, match_tab, calibration_tab, validation_tab, report_tab = st.tabs(
-        ["Spectrum", "Peak analysis", "Advanced fitting", "Detector physics", "Radiation interactions", "Radioactive decay", "Learning lab", "Reference matching", "Calibration", "Validation", "Report"])
+    dashboard_tab, overview_tab, peaks_tab, advanced_tab, detector_tab, interactions_tab, decay_tab, learning_tab, match_tab, calibration_tab, validation_tab, report_tab = st.tabs(
+        ["Dashboard", "Spectrum", "Peak analysis", "Advanced fitting", "Detector physics", "Radiation interactions", "Radioactive decay", "Learning lab", "Reference matching", "Calibration", "Validation", "Report"])
+    with dashboard_tab:
+        st.subheader("Scientific results dashboard")
+        dashboard_summary = build_results_summary(
+            spectrum, peaks, fits, source_label=source_label,
+            is_imported=upload is not None, calibration_applied=enable_calibration,
+            overlap_result=overlap_result)
+        st.markdown(f"**Data origin:** {dashboard_summary['data_origin']}")
+        st.caption(f"Dataset: {dashboard_summary['dataset']} · Calibration: {dashboard_summary['energy_calibration']}")
+        d1, d2, d3, d4 = st.columns(4)
+        d1.metric("Total counts", f"{dashboard_summary['total_counts']:,.0f}")
+        d2.metric("Candidate maxima", dashboard_summary["candidate_maxima"])
+        d3.metric("Successful Gaussian fits", dashboard_summary["successful_single_peak_fits"])
+        d4.metric("Overlapping components", dashboard_summary["overlap_fit_components"])
+        st.caption(f"Energy range: {dashboard_summary['energy_min_kev']:.2f}–{dashboard_summary['energy_max_kev']:.2f} keV across {dashboard_summary['channels']:,} channels.")
+        st.plotly_chart(fig, use_container_width=True, key="dashboard_spectrum")
+        st.markdown("**Analysis summary**")
+        st.dataframe(pd.DataFrame([{"Metric": key.replace("_", " ").title(), "Value": value}
+            for key, value in dashboard_summary.items()]), use_container_width=True, hide_index=True)
+        export_left, export_right = st.columns(2)
+        with export_left:
+            st.download_button("Download summary CSV", summary_csv(dashboard_summary),
+                "gammaspec_results_summary.csv", "text/csv", key="dashboard_csv")
+        with export_right:
+            st.download_button("Download summary JSON", summary_json(dashboard_summary),
+                "gammaspec_results_summary.json", "application/json", key="dashboard_json")
+        st.warning("Candidate maxima and fitted peaks are model-dependent. Imported data may require independent energy calibration. No result establishes isotope identity or radiation safety.")
     with overview_tab:
         if isotope == "Overlapping demo" and upload is None and not enable_calibration:
             st.info("Zoomed to 450–540 keV. Orange vertical lines mark injected centers; dotted curves show each injected Gaussian component. The measured total can still have only one maximum. × markers show noisy local maxima.")
