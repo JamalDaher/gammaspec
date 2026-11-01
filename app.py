@@ -14,6 +14,7 @@ from gammaspec.overlap import fit_overlapping_peaks, double_gaussian_background
 from gammaspec.selection import selected_peak_energies
 from gammaspec.residuals import residual_comparison, residual_rms
 from gammaspec.model_selection import compare_information_criteria
+from gammaspec.poisson import compare_poisson_models
 import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
@@ -267,6 +268,23 @@ try:
                                        "model_comparison.csv", "text/csv")
                 except (ValueError, KeyError) as exc:
                     st.warning(f"Model comparison unavailable: {exc}")
+        with st.expander("Poisson likelihood model comparison", expanded=False):
+            st.caption("Refits both models using a Poisson count likelihood and a nonnegative constant background on the same channels.")
+            if not overlap_enabled:
+                st.info("Enable Fit two overlapping peaks to choose the centers and analysis window.")
+            else:
+                try:
+                    poisson_scores = compare_poisson_models(
+                        spectrum, (overlap_center_1, overlap_center_2), overlap_window
+                    )
+                    st.dataframe(poisson_scores.round(3), use_container_width=True, hide_index=True)
+                    st.download_button("Download Poisson comparison CSV",
+                                       poisson_scores.to_csv(index=False),
+                                       "poisson_model_comparison.csv", "text/csv")
+                    st.caption("Lower AIC/BIC favors a model under the assumed independent Poisson counts and constant-background models. These models use 4 and 7 fitted parameters, unlike the linear-background weighted Gaussian comparison above.")
+                    st.caption("Results depend on initialization, model assumptions and fit convergence. This does not establish two physical emissions or constitute a calibrated significance test.")
+                except (ValueError, KeyError) as exc:
+                    st.warning(f"Poisson comparison unavailable: {exc}")
         with detected_tab:
             st.subheader("Detected local maxima")
             st.caption("These are noisy candidate maxima, not necessarily separate gamma emissions.")
