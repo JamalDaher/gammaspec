@@ -9,6 +9,7 @@ from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference
 from gammaspec.identification import match_candidates
 from gammaspec.validation import benchmark, summary
 from gammaspec.importers import import_spectrum_text
+from gammaspec.reporting import render_report
 
 st.set_page_config(page_title="GammaSpec", page_icon="☢️", layout="wide")
 st.title("GammaSpec")
@@ -79,8 +80,8 @@ try:
             fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name=f"Fit {center:.1f} keV"))
     fig.update_layout(xaxis_title="Energy (keV)", yaxis_title="Counts per channel",
                       yaxis_type="log" if log_scale else "linear", template="plotly_dark")
-    overview_tab, peaks_tab, match_tab, calibration_tab, validation_tab = st.tabs(
-        ["Spectrum", "Peak analysis", "Reference matching", "Calibration", "Validation"])
+    overview_tab, peaks_tab, match_tab, calibration_tab, validation_tab, report_tab = st.tabs(
+        ["Spectrum", "Peak analysis", "Reference matching", "Calibration", "Validation", "Report"])
     with overview_tab:
         st.plotly_chart(fig, use_container_width=True)
         st.download_button("Export spectrum CSV", spectrum.to_csv(index=False), "spectrum.csv", "text/csv")
@@ -121,6 +122,17 @@ try:
             st.json(metrics)
             st.dataframe(benchmark_results, use_container_width=True)
             st.download_button("Download benchmark CSV", benchmark_results.to_csv(index=False), "benchmark.csv", "text/csv")
+
+    with report_tab:
+        st.subheader("Export scientific analysis")
+        st.caption("Self-contained HTML report with embedded interactive spectrum chart. Open in a browser to print or save as PDF.")
+        report = render_report(
+            spectrum, dataset=source_label, peaks=peaks, fits=fits,
+            candidates=candidates if match_enabled else None,
+            calibration=calibration if enable_calibration else None,
+            plot_html=fig.to_html(full_html=False, include_plotlyjs=True),
+        )
+        st.download_button("Download HTML analysis report", report, "gammaspec_report.html", "text/html")
 
 except (ValueError, KeyError) as exc:
     st.error(f"Could not process spectrum: {exc}")
