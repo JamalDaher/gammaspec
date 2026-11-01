@@ -30,6 +30,7 @@ from gammaspec.dashboard import build_results_summary, summary_csv, summary_json
 from gammaspec.comparison import compare_spectra, comparison_metrics
 from gammaspec.matching_workbench import rank_reference_candidates
 from gammaspec.calibration_workbench import calibration_diagnostics, measured_resolution_table
+from gammaspec.notebook import create_experiment_record, notebook_json, load_notebook_json
 import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
@@ -206,8 +207,8 @@ try:
         fig.update_xaxes(range=[450, 540])
     fig.update_layout(xaxis_title="Energy (keV)", yaxis_title="Counts per channel",
                       yaxis_type="log" if log_scale else "linear", template="plotly_dark")
-    dashboard_tab, overview_tab, comparison_tab_main, peaks_tab, advanced_tab, detector_tab, interactions_tab, decay_tab, learning_tab, match_tab, calibration_tab, validation_tab, report_tab = st.tabs(
-        ["Dashboard", "Spectrum", "Compare spectra", "Peak analysis", "Advanced fitting", "Detector physics", "Radiation interactions", "Radioactive decay", "Learning lab", "Reference matching", "Calibration", "Validation", "Report"])
+    dashboard_tab, overview_tab, comparison_tab_main, peaks_tab, advanced_tab, detector_tab, interactions_tab, decay_tab, learning_tab, match_tab, calibration_tab, validation_tab, notebook_tab, report_tab = st.tabs(
+        ["Dashboard", "Spectrum", "Compare spectra", "Peak analysis", "Advanced fitting", "Detector physics", "Radiation interactions", "Radioactive decay", "Learning lab", "Reference matching", "Calibration", "Validation", "Experiment notebook", "Report"])
     with dashboard_tab:
         st.subheader("Scientific results dashboard")
         dashboard_summary = build_results_summary(
@@ -966,6 +967,50 @@ try:
             st.dataframe(benchmark_results, use_container_width=True)
             st.download_button("Download benchmark CSV", benchmark_results.to_csv(index=False), "benchmark.csv", "text/csv")
 
+    with notebook_tab:
+        st.subheader("Experiment notebook")
+        st.caption("Record the current workspace configuration and observations in a portable JSON file. Notes are held only in this browser session until exported; no server-side notebook database is used.")
+        notebook_title = st.text_input("Experiment title", value=f"Analysis of {source_label}",
+            key="experiment_title")
+        notebook_notes = st.text_area("Observations and interpretation",
+            placeholder="Describe the hypothesis, acquisition conditions, peak observations, uncertainty, and limitations.",
+            height=170, key="experiment_notes")
+        notebook_record = None
+        try:
+            notebook_record = create_experiment_record(
+                title=notebook_title, notes=notebook_notes, dataset=source_label,
+                origin="Imported / user-supplied" if upload is not None else "Synthetic / simulated",
+                acquisition={"source": isotope if upload is None else upload.name,
+                    "live_time_s": live_time if upload is None else None,
+                    "random_seed": int(seed) if upload is None else None,
+                    "peak_prominence": prominence,
+                    "fit_enabled": fit_enabled,
+                    "fit_half_window_kev": fit_window,
+                    "minimum_peak_separation_kev": peak_separation},
+                calibration={"applied_in_app": bool(enable_calibration),
+                    "degree": int(calibration_degree) if enable_calibration else None,
+                    "reference_pairs": calibration_csv if enable_calibration else None,
+                    "rmse_kev": float(calibration.rmse_kev) if enable_calibration else None},
+                analysis=build_results_summary(spectrum, peaks, fits,
+                    source_label=source_label, is_imported=upload is not None,
+                    calibration_applied=enable_calibration, overlap_result=overlap_result))
+            st.download_button("Download experiment notebook JSON",
+                notebook_json(notebook_record), "gammaspec_experiment.json",
+                "application/json", key="notebook_export")
+            st.caption("The export stores configuration, notes and summary metrics, not raw spectrum channel data. Export the spectrum CSV separately for complete reproducibility.")
+        except ValueError as exc:
+            st.warning(f"Notebook entry invalid: {exc}")
+        st.divider()
+        st.markdown("**Review an exported notebook**")
+        notebook_upload = st.file_uploader("Open experiment notebook JSON",
+            type=["json"], key="notebook_import")
+        if notebook_upload is not None:
+            try:
+                loaded_notebook = load_notebook_json(notebook_upload.getvalue())
+                st.json(loaded_notebook)
+                st.info("Imported notebook is displayed for review only. It does not overwrite the current spectrum or workspace settings.")
+            except (ValueError, UnicodeDecodeError) as exc:
+                st.error(f"Could not read notebook: {exc}")
     with report_tab:
         st.subheader("Export scientific analysis")
         st.caption("Self-contained HTML report with embedded interactive spectrum chart. Open in a browser to print or save as PDF.")
