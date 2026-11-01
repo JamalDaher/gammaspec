@@ -33,6 +33,7 @@ from gammaspec.calibration_workbench import calibration_diagnostics, measured_re
 from gammaspec.notebook import create_experiment_record, notebook_json, load_notebook_json
 from gammaspec.project_archive import export_experiment_archive, import_experiment_archive
 from gammaspec.restoration import restoration_settings, compare_reanalysis
+from gammaspec.background_subtraction import subtract_background, integrate_net_region
 import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
@@ -243,8 +244,8 @@ try:
         fig.update_xaxes(range=[450, 540])
     fig.update_layout(xaxis_title="Energy (keV)", yaxis_title="Counts per channel",
                       yaxis_type="log" if log_scale else "linear", template="plotly_dark")
-    dashboard_tab, overview_tab, comparison_tab_main, peaks_tab, advanced_tab, detector_tab, interactions_tab, decay_tab, learning_tab, match_tab, calibration_tab, validation_tab, notebook_tab, report_tab = st.tabs(
-        ["Dashboard", "Spectrum", "Compare spectra", "Peak analysis", "Advanced fitting", "Detector physics", "Radiation interactions", "Radioactive decay", "Learning lab", "Reference matching", "Calibration", "Validation", "Experiment notebook", "Report"])
+    dashboard_tab, overview_tab, comparison_tab_main, background_tab, peaks_tab, advanced_tab, detector_tab, interactions_tab, decay_tab, learning_tab, match_tab, calibration_tab, validation_tab, notebook_tab, report_tab = st.tabs(
+        ["Dashboard", "Spectrum", "Compare spectra", "Background subtraction", "Peak analysis", "Advanced fitting", "Detector physics", "Radiation interactions", "Radioactive decay", "Learning lab", "Reference matching", "Calibration", "Validation", "Experiment notebook", "Report"])
     with dashboard_tab:
         st.subheader("Scientific results dashboard")
         dashboard_summary = build_results_summary(
@@ -347,6 +348,59 @@ try:
                 st.warning(f"Comparison unavailable: {exc}")
         else:
             st.info("Upload a second spectrum to compare.")
+    with background_tab:
+        st.subheader("Background subtraction and net counts")
+        st.caption("Subtract a separately measured background after normalizing by acquisition live time. This analysis does not change the active spectrum or its peak fits.")
+        sample_live = st.number_input("Sample live time (s)", min_value=0.001,
+            value=float(live_time), key="bg_sample_live")
+        background_live = st.number_input("Background live time (s)", min_value=0.001,
+            value=float(live_time), key="bg_reference_live")
+        background_source = st.radio("Background source", ["Simulated background", "Upload background CSV"],
+            horizontal=True, key="bg_source")
+        background_spectrum = None
+        if background_source == "Simulated background":
+            background_spectrum = simulate_spectrum("Background",
+                live_time_s=background_live, seed=int(seed) + 1,
+                channels=len(spectrum), max_energy_kev=float(spectrum.energy_kev.iloc[-1]))
+            st.caption("Synthetic background is an illustrative model, not a measured background.")
+        else:
+            bg_upload = st.file_uploader("Background CSV with channel, energy_kev, counts",
+                type=["csv"], key="bg_upload")
+            if bg_upload is not None:
+                background_spectrum = import_spectrum_text(bg_upload.getvalue(), format="csv")
+        if background_spectrum is not None:
+            try:
+                corrected = subtract_background(spectrum, background_spectrum,
+                    sample_live, background_live)
+                chart = go.Figure()
+                chart.add_trace(go.Scatter(x=corrected.energy_kev, y=corrected.sample_rate_cps,
+                    mode="lines", name="Sample rate (counts/s/channel)"))
+                chart.add_trace(go.Scatter(x=corrected.energy_kev, y=corrected.background_rate_cps,
+                    mode="lines", name="Background rate (counts/s/channel)"))
+                chart.add_trace(go.Scatter(x=corrected.energy_kev, y=corrected.net_rate_cps,
+                    mode="lines", name="Net rate (counts/s/channel)"))
+                chart.update_layout(xaxis_title="Energy (keV)",
+                    yaxis_title="Counts/s/channel", template="plotly_dark")
+                st.plotly_chart(chart, use_container_width=True)
+                st.download_button("Export corrected spectrum with uncertainties",
+                    corrected.to_csv(index=False), "gammaspec_background_corrected.csv",
+                    "text/csv", key="background_export")
+                roi_min = float(corrected.energy_kev.min())
+                roi_max = float(corrected.energy_kev.max())
+                col_lo, col_hi = st.columns(2)
+                low = col_lo.number_input("ROI lower energy (keV)", min_value=roi_min,
+                    max_value=roi_max, value=roi_min, key="background_roi_low")
+                high = col_hi.number_input("ROI upper energy (keV)", min_value=roi_min,
+                    max_value=roi_max, value=roi_max, key="background_roi_high")
+                if low < high:
+                    net_roi = integrate_net_region(corrected, low, high)
+                    st.metric("Net ROI counts ± 1σ",
+                        f"{net_roi['net_counts']:,.1f} ± {net_roi['uncertainty_counts']:,.1f}")
+                    st.metric("Net ROI rate ± 1σ (counts/s)",
+                        f"{net_roi['net_rate_cps']:,.3f} ± {net_roi['uncertainty_rate_cps']:,.3f}")
+                st.caption("Assumes independent Poisson sample and background counts, matching channel grids, and known live times. Negative net counts are valid subtraction outcomes; they are not clipped. ROI sums are not continuum-corrected peak areas. Not suitable for dosimetry or safety decisions.")
+            except (ValueError, KeyError) as exc:
+                st.warning(f"Background subtraction unavailable: {exc}")
     with peaks_tab:
         st.caption("Detection finds local maxima; fitting estimates model parameters. One detected maximum may contain multiple overlapping components.")
         comparison_tab, detected_tab, single_tab, double_tab = st.tabs(
