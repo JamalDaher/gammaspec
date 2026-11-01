@@ -6,6 +6,7 @@ from gammaspec.fitting import fit_detected_peaks, gaussian_background
 import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
+from gammaspec.identification import match_candidates
 
 st.set_page_config(page_title="GammaSpec", page_icon="☢️", layout="wide")
 st.title("GammaSpec · Gamma-Ray Spectroscopy")
@@ -23,6 +24,8 @@ with st.sidebar:
     default_refs = "100,80\\n500,400\\n1000,800\\n1500,1200" if calibration_degree == 1 else "100,80\\n400,320\\n700,560\\n1000,800"
     calibration_csv = st.text_area("Reference pairs: channel,energy_keV", default_refs, height=110)
     fit_enabled = st.toggle("Fit candidate photopeaks", value=True)
+    match_enabled = st.toggle("Compare reference gamma lines", value=True)
+    match_tolerance = st.slider("Line matching tolerance (keV)", 1, 30, 12)
     fit_window = st.slider("Fit half-window (keV)", 25, 90, 55)
     upload = st.file_uploader("Import CSV", type=["csv"])
 try:
@@ -61,6 +64,17 @@ try:
         st.dataframe(fits, use_container_width=True)
         st.caption("Uncertainties are approximate 1σ covariance estimates from weighted least squares; overlapping peaks may bias fits.")
         st.download_button("Download fit table CSV", fits.to_csv(index=False), "peak_fits.csv", "text/csv")
+    if match_enabled:
+        st.subheader("Reference line candidates")
+        observed = (fits.loc[fits.status == "ok", "centroid_kev"].to_numpy()
+                    if fits is not None and not fits.empty else peaks.energy_kev.to_numpy())
+        candidates = match_candidates(observed, tolerance_kev=match_tolerance)
+        if candidates.empty:
+            st.info("No reference-line matches within the selected tolerance.")
+        else:
+            st.dataframe(candidates, use_container_width=True)
+            st.download_button("Download candidates CSV", candidates.to_csv(index=False), "candidates.csv", "text/csv")
+        st.caption("Candidate matching is not isotope identification. Missing lines, mixtures, calibration error and detector response can change results.")
     st.download_button("Download spectrum CSV", spectrum.to_csv(index=False), "spectrum.csv", "text/csv")
 except (ValueError, KeyError) as exc:
     st.error(f"Could not process spectrum: {exc}")
