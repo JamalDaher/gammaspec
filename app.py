@@ -11,6 +11,7 @@ from gammaspec import core as gammaspec_core
 from gammaspec.core import simulate_spectrum, find_photopeaks, read_spectrum
 from gammaspec.fitting import fit_detected_peaks, gaussian_background
 from gammaspec.overlap import fit_overlapping_peaks, double_gaussian_background
+from gammaspec.selection import selected_peak_energies
 import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
@@ -18,6 +19,16 @@ from gammaspec.identification import match_candidates
 from gammaspec.validation import benchmark, summary
 from gammaspec.importers import import_spectrum_text
 from gammaspec.reporting import render_report
+
+def handle_peak_selection():
+    event = st.session_state.get("spectrum_peak_selector", {})
+    points = event.get("selection", {}).get("points", [])
+    energies = selected_peak_energies(points, st.session_state.get("candidate_peak_energies", []))
+    if len(energies) == 2:
+        st.session_state["overlap_center_1"] = energies[0]
+        st.session_state["overlap_center_2"] = energies[1]
+        st.session_state["overlap_fit_enabled"] = True
+
 
 st.set_page_config(page_title="GammaSpec", page_icon="☢️", layout="wide")
 st.title("GammaSpec")
@@ -51,10 +62,10 @@ with st.sidebar:
     st.subheader("Overlapping peaks (experimental)")
     if isotope == "Overlapping demo":
         st.caption("Synthetic example: peaks at 485 and 505 keV; not an isotope.")
-    overlap_enabled = st.toggle("Fit two overlapping peaks", value=isotope == "Overlapping demo")
+    overlap_enabled = st.toggle("Fit two overlapping peaks", value=isotope == "Overlapping demo", key="overlap_fit_enabled")
     if overlap_enabled:
-        overlap_center_1 = st.number_input("First peak center (keV)", min_value=0.0, value=485.0)
-        overlap_center_2 = st.number_input("Second peak center (keV)", min_value=0.0, value=505.0)
+        overlap_center_1 = st.number_input("First peak center (keV)", min_value=0.0, value=485.0, key="overlap_center_1")
+        overlap_center_2 = st.number_input("Second peak center (keV)", min_value=0.0, value=505.0, key="overlap_center_2")
         overlap_window = st.slider("Two-peak half-window (keV)", 10, 100, 35)
     st.divider()
     upload = st.file_uploader("Import spectrum CSV or counts text", type=["csv", "txt"])
@@ -90,6 +101,7 @@ try:
     metrics[2].metric("Total counts", f"{int(spectrum.counts.sum()):,}")
     metrics[3].metric("Energy span", f"{spectrum.energy_kev.max():.0f} keV")
     peaks = find_photopeaks(spectrum, prominence=prominence)
+    st.session_state["candidate_peak_energies"] = peaks.energy_kev.tolist()
     fig = go.Figure(go.Scatter(x=spectrum.energy_kev, y=spectrum.counts, mode="lines", name="Counts"))
     fig.add_trace(go.Scatter(x=peaks.energy_kev, y=peaks.counts, mode="markers",
                              marker={"size": 9, "symbol": "x"}, name="Candidate peaks"))
@@ -137,7 +149,9 @@ try:
     overview_tab, peaks_tab, match_tab, calibration_tab, validation_tab, report_tab = st.tabs(
         ["Spectrum", "Peak analysis", "Reference matching", "Calibration", "Validation", "Report"])
     with overview_tab:
-        st.plotly_chart(fig, use_container_width=True)
+        st.caption("Select two candidate × markers using Shift-click or box selection to seed the two-peak fit.")
+        st.plotly_chart(fig, use_container_width=True, key="spectrum_peak_selector",
+                        on_select=handle_peak_selection, selection_mode=("points", "box"))
         st.download_button("Export spectrum CSV", spectrum.to_csv(index=False), "spectrum.csv", "text/csv")
     with peaks_tab:
         st.subheader("Candidate peaks")
