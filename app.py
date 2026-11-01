@@ -15,6 +15,7 @@ from gammaspec.selection import selected_peak_energies
 from gammaspec.residuals import residual_comparison, residual_rms
 from gammaspec.model_selection import compare_information_criteria
 from gammaspec.poisson import compare_poisson_models
+from gammaspec.monte_carlo import monte_carlo_recovery, recovery_summary
 import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
@@ -285,6 +286,45 @@ try:
                     st.caption("Results depend on initialization, model assumptions and fit convergence. This does not establish two physical emissions or constitute a calibrated significance test.")
                 except (ValueError, KeyError) as exc:
                     st.warning(f"Poisson comparison unavailable: {exc}")
+        with st.expander("Monte Carlo peak recovery", expanded=False):
+            st.caption("Repeat independent Poisson simulations of the known 485/505 keV overlap example. Fit each simulation to estimate recovery bias and variability.")
+            mc_trials = st.slider("Monte Carlo trials", 2, 50, 10, key="mc_trials")
+            mc_time = st.slider("Simulated live time (s)", 10, 300, 60, key="mc_live_time")
+            mc_seed = st.number_input("Monte Carlo seed", min_value=0, value=42, key="mc_seed")
+            if st.button("Run recovery study", key="run_mc"):
+                with st.spinner("Simulating and fitting independent spectra..."):
+                    try:
+                        st.session_state["mc_results"] = monte_carlo_recovery(
+                            trials=mc_trials, live_time_s=mc_time, seed=int(mc_seed)
+                        )
+                        st.session_state["mc_settings"] = (mc_trials, mc_time, int(mc_seed))
+                    except ValueError as exc:
+                        st.error(f"Monte Carlo study unavailable: {exc}")
+            mc_results = st.session_state.get("mc_results")
+            if mc_results is not None:
+                settings = st.session_state.get("mc_settings")
+                if settings != (mc_trials, mc_time, int(mc_seed)):
+                    st.info("Displayed results use previous settings. Run the study again to update.")
+                summary_mc = recovery_summary(mc_results)
+                st.metric("Successful fits", f'{summary_mc["successes"]}/{summary_mc["trials"]}')
+                st.dataframe(pd.DataFrame([
+                    {"Injected center (keV)": 485.0, "Bias (keV)": summary_mc["bias_1_kev"],
+                     "Empirical SD (keV)": summary_mc["sd_1_kev"]},
+                    {"Injected center (keV)": 505.0, "Bias (keV)": summary_mc["bias_2_kev"],
+                     "Empirical SD (keV)": summary_mc["sd_2_kev"]},
+                ]), use_container_width=True, hide_index=True)
+                good = mc_results.loc[mc_results.status == "ok"]
+                if not good.empty:
+                    mc_fig = go.Figure()
+                    for column, label in (("center_1_kev", "First recovered center"),
+                                          ("center_2_kev", "Second recovered center")):
+                        mc_fig.add_trace(go.Histogram(x=good[column], name=label, opacity=0.65))
+                    mc_fig.update_layout(barmode="overlay", xaxis_title="Recovered centroid (keV)",
+                                         yaxis_title="Trials", template="plotly_dark", height=320)
+                    st.plotly_chart(mc_fig, use_container_width=True)
+                st.download_button("Download Monte Carlo trials CSV", mc_results.to_csv(index=False),
+                                   "monte_carlo_recovery.csv", "text/csv")
+                st.caption("Simulation study only. Failed fits are excluded from bias/SD, so estimates may be selection-biased. Empirical SD is not a confidence interval or measurement uncertainty for uploaded data.")
         with detected_tab:
             st.subheader("Detected local maxima")
             st.caption("These are noisy candidate maxima, not necessarily separate gamma emissions.")
