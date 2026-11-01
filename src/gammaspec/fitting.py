@@ -42,6 +42,8 @@ def fit_photopeak(spectrum, center_kev, half_window_kev=65):
     if not np.isfinite(covariance).all():
         raise ValueError("Peak covariance could not be estimated")
     errors = np.sqrt(np.maximum(np.diag(covariance), 0))
+    residuals = (y - gaussian_background(x, *parameters)) / np.sqrt(np.maximum(y, 1))
+    reduced_chi_square = float(np.sum(residuals ** 2) / (len(y) - len(parameters)))
     a, mu, width, background, slope = parameters
     a_err, mu_err, width_err, _, _ = errors
     # Integrated peak area in count*keV; divide by channel spacing for counts.
@@ -60,18 +62,47 @@ def fit_photopeak(spectrum, center_kev, half_window_kev=65):
         "amplitude_counts": float(a),
         "slope": float(slope),
         "sigma_kev": float(width),
+        "reduced_chi_square": reduced_chi_square,
     }
 
-def fit_detected_peaks(spectrum, prominence=150, half_window_kev=65, max_peaks=10):
-    """Fit strongest detected peaks; report failures without hiding them."""
+def fit_detected_peaks(spectrum, prominence=150, half_window_kev=65, max_peaks=10,
+                       min_separation_kev=35.0):
+    """Fit prominent peaks, suppress duplicate candidates and flag overlapping fits.
+
+    The reduced chi-square is a descriptive weighted residual metric, not a
+    calibrated goodness-of-fit probability. Nearby features are flagged rather
+    than deconvolved by a multi-peak model.
+    """
+    if not isinstance(max_peaks, int) or max_peaks < 1:
+        raise ValueError("max_peaks must be a positive integer")
+    if not np.isfinite(min_separation_kev) or min_separation_kev < 0:
+        raise ValueError("min_separation_kev must be finite and nonnegative")
     candidates = find_photopeaks(spectrum, prominence=prominence)
-    candidates = candidates.nlargest(max_peaks, "prominence")
+    strongest = candidates.sort_values("prominence", ascending=False)
+    selected = []
+    for candidate in strongest.itertuples():
+        if all(abs(candidate.energy_kev - previous.energy_kev) >= min_separation_kev
+               for previous in selected):
+            selected.append(candidate)
+            if len(selected) >= max_peaks:
+                break
     results = []
-    for candidate in candidates.itertuples():
+    for candidate in selected:
         try:
             result = fit_photopeak(spectrum, candidate.energy_kev, half_window_kev)
             result["status"] = "ok"
+            result["quality_flag"] = (
+                "review_fit" if result["reduced_chi_square"] > 3 else "nominal"
+            )
         except ValueError as exc:
-            result = {"centroid_kev": float(candidate.energy_kev), "status": str(exc)}
+            result = {"centroid_kev": float(candidate.energy_kev),
+                      "status": str(exc), "quality_flag": "fit_failed"}
         results.append(result)
+    successful = [r for r in results if r["status"] == "ok"]
+    for result in successful:
+        if any(other is not result and
+               abs(other["centroid_kev"] - result["centroid_kev"]) <
+               (other["fwhm_kev"] + result["fwhm_kev"]) / 2
+               for other in successful):
+            result["quality_flag"] = "possible_overlap"
     return pd.DataFrame(results)
