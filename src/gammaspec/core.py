@@ -4,7 +4,8 @@ import numpy as np
 import pandas as pd
 from scipy.signal import find_peaks
 
-LINES = {"Cs-137": [(661.657, 1.0)], "Co-60": [(1173.228, 0.95), (1332.492, 1.0)]}
+LINES = {"Cs-137": [(661.657, 1.0)], "Co-60": [(1173.228, 0.95), (1332.492, 1.0)],
+         "Overlapping demo": [(485.0, 1.0), (505.0, 0.7)]}
 
 def simulate_spectrum(isotope="Cs-137", channels=2048, max_energy_kev=1600.0,
                       live_time_s=60.0, seed=42, background_rate=0.1):
@@ -20,7 +21,8 @@ def simulate_spectrum(isotope="Cs-137", channels=2048, max_energy_kev=1600.0,
     expected = np.full(channels, background_rate * live_time_s)
     expected += 0.3 * live_time_s * np.exp(-energy / 450)
     for line, strength in LINES.get(isotope, []):
-        sigma = max(4.0, 0.025 * line)
+        sigma = (8.0 if isotope == "Overlapping demo" and line == 485.0
+                 else 10.0 if isotope == "Overlapping demo" else max(4.0, 0.025 * line))
         expected += 12.0 * live_time_s * strength * np.exp(-0.5 * ((energy-line)/sigma)**2)
     counts = np.random.default_rng(seed).poisson(expected)
     return pd.DataFrame({"channel": np.arange(channels), "energy_kev": energy, "counts": counts})

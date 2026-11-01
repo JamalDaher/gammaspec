@@ -18,7 +18,7 @@ st.markdown("**Gamma-ray spectroscopy workbench** · Simulation, calibration and
 st.caption("Research and education prototype · Not for radiation safety, dosimetry, or authoritative isotope identification.")
 with st.sidebar:
     st.header("Acquisition")
-    isotope = st.selectbox("Source", ["Cs-137", "Co-60", "Background"])
+    isotope = st.selectbox("Source", ["Cs-137", "Co-60", "Background", "Overlapping demo"])
     live_time = st.slider("Live time (s)", 10, 300, 60)
     seed = st.number_input("Random seed", min_value=0, value=42)
     prominence = st.slider("Peak prominence", 10, 300, 150)
@@ -38,7 +38,9 @@ with st.sidebar:
     peak_separation = st.slider("Minimum peak separation (keV)", 0, 100, 35)
     st.divider()
     st.subheader("Overlapping peaks (experimental)")
-    overlap_enabled = st.toggle("Fit two overlapping peaks", value=False)
+    if isotope == "Overlapping demo":
+        st.caption("Synthetic example: peaks at 485 and 505 keV; not an isotope.")
+    overlap_enabled = st.toggle("Fit two overlapping peaks", value=isotope == "Overlapping demo")
     if overlap_enabled:
         overlap_center_1 = st.number_input("First peak center (keV)", min_value=0.0, value=485.0)
         overlap_center_2 = st.number_input("Second peak center (keV)", min_value=0.0, value=505.0)
