@@ -27,6 +27,7 @@ from gammaspec.learning_progress import CHALLENGES, grade_numeric, record_attemp
 from gammaspec.decay import HALF_LIVES_YEARS, remaining_activity, decay_fraction, parent_daughter_atoms
 from gammaspec.decay_chains import chain_populations, equilibrium_class
 from gammaspec.dashboard import build_results_summary, summary_csv, summary_json
+from gammaspec.comparison import compare_spectra, comparison_metrics
 import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
@@ -203,8 +204,8 @@ try:
         fig.update_xaxes(range=[450, 540])
     fig.update_layout(xaxis_title="Energy (keV)", yaxis_title="Counts per channel",
                       yaxis_type="log" if log_scale else "linear", template="plotly_dark")
-    dashboard_tab, overview_tab, peaks_tab, advanced_tab, detector_tab, interactions_tab, decay_tab, learning_tab, match_tab, calibration_tab, validation_tab, report_tab = st.tabs(
-        ["Dashboard", "Spectrum", "Peak analysis", "Advanced fitting", "Detector physics", "Radiation interactions", "Radioactive decay", "Learning lab", "Reference matching", "Calibration", "Validation", "Report"])
+    dashboard_tab, overview_tab, comparison_tab_main, peaks_tab, advanced_tab, detector_tab, interactions_tab, decay_tab, learning_tab, match_tab, calibration_tab, validation_tab, report_tab = st.tabs(
+        ["Dashboard", "Spectrum", "Compare spectra", "Peak analysis", "Advanced fitting", "Detector physics", "Radiation interactions", "Radioactive decay", "Learning lab", "Reference matching", "Calibration", "Validation", "Report"])
     with dashboard_tab:
         st.subheader("Scientific results dashboard")
         dashboard_summary = build_results_summary(
@@ -238,6 +239,75 @@ try:
         st.plotly_chart(fig, use_container_width=True, key="spectrum_peak_selector",
                         on_select=handle_peak_selection, selection_mode=("points", "box"))
         st.download_button("Export spectrum CSV", spectrum.to_csv(index=False), "spectrum.csv", "text/csv")
+    with comparison_tab_main:
+        st.subheader("Gamma-ray spectrum comparison")
+        st.caption("Compare the current spectrum against a second simulated source or uploaded spectrum. Energy axes must overlap; imported energies need independent calibration.")
+        compare_mode = st.radio("Second spectrum source", ["Simulated", "Upload CSV or counts text"],
+            horizontal=True, key="comparison_mode")
+        secondary = None
+        secondary_label = None
+        if compare_mode == "Simulated":
+            compare_isotope = st.selectbox("Comparison source",
+                ["Cs-137", "Co-60", "Background", "Overlapping demo"], key="comparison_source")
+            compare_time = st.slider("Comparison live time (s)", 10, 300, 60,
+                key="comparison_live_time")
+            secondary = simulate_spectrum(compare_isotope, live_time_s=compare_time,
+                seed=int(seed) + 1)
+            secondary_label = f"Simulated {compare_isotope}"
+        else:
+            compare_upload = st.file_uploader("Second spectrum file", type=["csv", "txt"],
+                key="comparison_upload")
+            if compare_upload is not None:
+                compare_format = st.selectbox("Second spectrum format", ["auto", "csv", "counts"],
+                    key="comparison_format")
+                compare_width = st.number_input("Second spectrum keV/channel (if needed)",
+                    min_value=0.001, value=0.8, key="comparison_width")
+                compare_offset = st.number_input("Second spectrum energy offset (keV)",
+                    value=0.0, key="comparison_offset")
+                secondary_label = compare_upload.name
+                try:
+                    secondary = import_spectrum_text(compare_upload.getvalue(),
+                        format=compare_format, energy_per_channel_kev=compare_width,
+                        energy_offset_kev=compare_offset)
+                except ValueError as exc:
+                    st.error(f"Second spectrum could not be imported: {exc}")
+        normalization = st.radio("Comparison scaling",
+            ["Area normalized (shape)", "Raw count density (counts/keV)"],
+            horizontal=True, key="comparison_scaling")
+        if secondary is not None:
+            try:
+                mode = "area" if normalization.startswith("Area") else "raw"
+                compared = compare_spectra(spectrum, secondary, normalization=mode)
+                comparison_stats = comparison_metrics(compared)
+                left, right = st.columns(2)
+                left.metric("Mean absolute difference",
+                    f"{comparison_stats['mean_absolute_difference']:.4g}")
+                corr = comparison_stats["pearson_correlation"]
+                right.metric("Shape correlation", f"{corr:.3f}" if corr is not None else "N/A")
+                overlay = go.Figure()
+                overlay.add_trace(go.Scatter(x=compared.energy_kev, y=compared.primary,
+                    mode="lines", name=source_label))
+                overlay.add_trace(go.Scatter(x=compared.energy_kev, y=compared.secondary,
+                    mode="lines", name=secondary_label))
+                overlay.update_layout(xaxis_title="Energy (keV)",
+                    yaxis_title="Normalized density (1/keV)" if mode == "area" else "Count density (counts/keV)",
+                    height=350)
+                st.plotly_chart(overlay, use_container_width=True)
+                difference_fig = go.Figure(go.Scatter(x=compared.energy_kev,
+                    y=compared.difference_primary_minus_secondary, mode="lines",
+                    name="Primary − secondary"))
+                difference_fig.add_hline(y=0, line_dash="dash")
+                difference_fig.update_layout(xaxis_title="Energy (keV)",
+                    yaxis_title="Primary minus secondary", height=280)
+                st.plotly_chart(difference_fig, use_container_width=True)
+                st.download_button("Download comparison CSV",
+                    compared.to_csv(index=False), "spectrum_comparison.csv",
+                    "text/csv", key="comparison_export")
+                st.caption("Curves are interpolated count densities on a common energy grid. Area normalization removes overall intensity; raw count density is not a live-time-corrected rate. Difference values are descriptive, not Poisson significance or detector calibration.")
+            except ValueError as exc:
+                st.warning(f"Comparison unavailable: {exc}")
+        else:
+            st.info("Upload a second spectrum to compare.")
     with peaks_tab:
         st.caption("Detection finds local maxima; fitting estimates model parameters. One detected maximum may contain multiple overlapping components.")
         comparison_tab, detected_tab, single_tab, double_tab = st.tabs(
