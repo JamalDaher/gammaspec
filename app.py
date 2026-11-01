@@ -18,6 +18,7 @@ from gammaspec.poisson import compare_poisson_models
 from gammaspec.monte_carlo import monte_carlo_recovery, recovery_summary
 from gammaspec.resolution import resolution_study, summarize_resolution
 from gammaspec.detector_resolution import fwhm_kev, resolution_percent, illustrative_doublet
+from gammaspec.efficiency import peak_efficiency, counting_statistics
 import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
@@ -400,6 +401,40 @@ try:
             st.metric("Resolution at midpoint",
                 f"{resolution_percent(detector_energy, detector_choice, detector_ref):.2f}%")
             st.caption("The two equal-area Gaussian components are idealized and noiseless. The plotted density is not a count spectrum. Real HPGe and NaI(Tl) resolution varies with detector design, electronics, and energy.")
+        with st.expander("Detector efficiency and counting statistics", expanded=False):
+            st.caption("Illustrative full-energy peak efficiencies, not absolute calibrations or manufacturer specifications.")
+            eff_detector = st.selectbox("Efficiency model", ["HPGe (illustrative)", "NaI(Tl) (illustrative)"], key="eff_detector")
+            eff_ref = st.slider("Peak efficiency at 662 keV (%)", 1, 60,
+                                8 if eff_detector.startswith("HPGe") else 15, key="eff_ref")
+            eff_energy = st.slider("Gamma energy (keV)", 100, 1600, 662, key="eff_energy")
+            eff_rate = st.number_input("Incident gamma rate (photons/s)", min_value=0.0,
+                                       max_value=100000.0, value=100.0, key="eff_rate")
+            eff_time = st.slider("Counting time (s)", 1, 600, 60, key="eff_time")
+            eff_background = st.number_input("Background rate in peak region (counts/s)",
+                                             min_value=0.0, value=2.0, key="eff_background")
+            eff_energy_axis = np.linspace(100, 1600, 300)
+            eff_curve = 100 * peak_efficiency(eff_energy_axis, eff_detector, eff_ref / 100)
+            eff_fig = go.Figure()
+            eff_fig.add_trace(go.Scatter(x=eff_energy_axis, y=eff_curve, mode="lines",
+                                         name="Full-energy peak efficiency"))
+            eff_fig.update_layout(xaxis_title="Gamma energy (keV)", yaxis_title="Efficiency (%)",
+                                  template="plotly_dark", height=300)
+            st.plotly_chart(eff_fig, use_container_width=True)
+            stats = counting_statistics(eff_energy, eff_detector, eff_rate, eff_time,
+                                        eff_background, eff_ref / 100)
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Expected peak counts", f'{stats["signal_counts"]:,.1f}')
+            c2.metric("Poisson σ (total counts)", f'{stats["poisson_sigma_counts"]:,.1f}')
+            c3.metric("Approx. SNR", f'{stats["approx_snr"]:.2f}')
+            times = np.linspace(1, 600, 120)
+            snr_values = [counting_statistics(eff_energy, eff_detector, eff_rate, t,
+                          eff_background, eff_ref / 100)["approx_snr"] for t in times]
+            snr_fig = go.Figure()
+            snr_fig.add_trace(go.Scatter(x=times, y=snr_values, mode="lines", name="SNR"))
+            snr_fig.update_layout(xaxis_title="Counting time (s)", yaxis_title="Approximate SNR",
+                                  template="plotly_dark", height=280)
+            st.plotly_chart(snr_fig, use_container_width=True)
+            st.caption("Expected counts use incident rate × time × full-energy peak efficiency. SNR = expected signal / sqrt(signal + background), assuming known background; background estimation, dead time, pile-up, geometry and other detector effects are excluded.")
         with detected_tab:
             st.subheader("Detected local maxima")
             st.caption("These are noisy candidate maxima, not necessarily separate gamma emissions.")
