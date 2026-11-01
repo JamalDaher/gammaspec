@@ -170,27 +170,42 @@ try:
                         on_select=handle_peak_selection, selection_mode=("points", "box"))
         st.download_button("Export spectrum CSV", spectrum.to_csv(index=False), "spectrum.csv", "text/csv")
     with peaks_tab:
-        st.subheader("Candidate peaks")
-        st.dataframe(peaks, use_container_width=True)
-    if overlap_enabled:
-      with peaks_tab:
-        st.subheader("Simultaneous two-peak fit (experimental)")
-        if overlap_result is None:
-            st.info("Choose two distinct starting energies and a suitable fit window.")
-        else:
-            st.dataframe(pd.DataFrame(overlap_result["components"]), use_container_width=True)
-            st.metric("Reduced chi-square (descriptive)", f'{overlap_result["reduced_chi_square"]:.2f}')
-            st.caption(f'Quality flag: {overlap_result["quality_flag"]}. Two-component fitting is model-dependent and does not prove that two physical gamma lines are present.')
-            st.download_button("Download two-peak fit CSV",
-                               pd.DataFrame(overlap_result["components"]).to_csv(index=False),
-                               "overlap_fits.csv", "text/csv")
-    if fits is not None:
-      with peaks_tab:
-        st.subheader("Gaussian photopeak fits")
-        st.dataframe(fits, use_container_width=True)
-        st.caption("Quality flags: nominal, review_fit (large weighted residuals), possible_overlap, or fit_failed. Flags are heuristic.")
-        st.caption("Uncertainties are approximate 1σ covariance estimates from weighted least squares; overlapping peaks may bias fits.")
-        st.download_button("Download fit table CSV", fits.to_csv(index=False), "peak_fits.csv", "text/csv")
+        st.caption("Detection finds local maxima; fitting estimates model parameters. One detected maximum may contain multiple overlapping components.")
+        detected_tab, single_tab, double_tab = st.tabs(
+            ["Detected peaks", "Single-peak fits", "Two-component fit"]
+        )
+        with detected_tab:
+            st.subheader("Detected local maxima")
+            st.caption("These are noisy candidate maxima, not necessarily separate gamma emissions.")
+            st.metric("Detected maxima", len(peaks))
+            st.dataframe(peaks, use_container_width=True, hide_index=True)
+        with single_tab:
+            st.subheader("Single-Gaussian fits")
+            if fits is None:
+                st.info("Enable Fit candidate photopeaks in the sidebar to calculate single-peak fits.")
+            elif fits.empty:
+                st.info("No candidates passed the current prominence threshold.")
+            else:
+                st.dataframe(fits, use_container_width=True, hide_index=True)
+                st.caption("A single Gaussian fitted to overlapping peaks can return a centroid between their true centers.")
+                st.caption("Quality flags are heuristic; uncertainties assume the chosen fit model.")
+                st.download_button("Download single-peak fits CSV", fits.to_csv(index=False),
+                                   "peak_fits.csv", "text/csv")
+        with double_tab:
+            st.subheader("Simultaneous two-peak fit")
+            if not overlap_enabled:
+                st.info("Enable Fit two overlapping peaks in the sidebar to estimate two components.")
+            elif overlap_result is None:
+                st.warning("Two-component fitting is unavailable for the current settings; see the warning above.")
+            else:
+                components_table = pd.DataFrame(overlap_result["components"])
+                st.dataframe(components_table, use_container_width=True, hide_index=True)
+                st.metric("Reduced chi-square (descriptive)",
+                          f'{overlap_result["reduced_chi_square"]:.2f}')
+                st.caption(f'Quality flag: {overlap_result["quality_flag"]}. The two-component model does not establish two physical gamma emissions.')
+                st.download_button("Download two-component fits CSV",
+                                   components_table.to_csv(index=False),
+                                   "overlap_fits.csv", "text/csv")
     candidates = None
     if match_enabled:
       with match_tab:
