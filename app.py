@@ -145,6 +145,14 @@ try:
                                     fit["background_at_centroid"], fit["slope"])
             fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name=f"Fit {center:.1f} keV"))
     if isotope == "Overlapping demo" and upload is None and not enable_calibration:
+        demo_x = spectrum.energy_kev.to_numpy(dtype=float)
+        for center, width, strength in ((485.0, 8.0, 1.0), (505.0, 10.0, 0.7)):
+            component = 12.0 * live_time * strength * np.exp(-0.5 * ((demo_x - center) / width) ** 2)
+            fig.add_trace(go.Scatter(x=demo_x, y=component, mode="lines",
+                                     name=f"Injected component {center:g} keV",
+                                     line={"dash": "dot", "width": 3}))
+        st.caption("Demo component curves represent known injected model contributions, not independent measured peaks.")
+    if isotope == "Overlapping demo" and upload is None and not enable_calibration:
         for energy in (485.0, 505.0):
             fig.add_vline(x=energy, line_dash="dot", line_color="orange",
                           annotation_text=f"Injected {energy:g} keV",
@@ -156,7 +164,7 @@ try:
         ["Spectrum", "Peak analysis", "Reference matching", "Calibration", "Validation", "Report"])
     with overview_tab:
         if isotope == "Overlapping demo" and upload is None and not enable_calibration:
-            st.info("Zoomed to 450–540 keV. Orange lines show injected 485 and 505 keV components. × markers show noisy detected maxima, which can differ from fitted centers.")
+            st.info("Zoomed to 450–540 keV. Orange vertical lines mark injected centers; dotted curves show each injected Gaussian component. The measured total can still have only one maximum. × markers show noisy local maxima.")
         st.caption("Select two candidate × markers using Shift-click or box selection to seed the two-peak fit.")
         st.plotly_chart(fig, use_container_width=True, key="spectrum_peak_selector",
                         on_select=handle_peak_selection, selection_mode=("points", "box"))
