@@ -17,6 +17,7 @@ from gammaspec.model_selection import compare_information_criteria
 from gammaspec.poisson import compare_poisson_models
 from gammaspec.monte_carlo import monte_carlo_recovery, recovery_summary
 from gammaspec.resolution import resolution_study, summarize_resolution
+from gammaspec.detector_resolution import fwhm_kev, resolution_percent, illustrative_doublet
 import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
@@ -365,6 +366,40 @@ try:
                                    trial_results.to_csv(index=False),
                                    "resolution_trials.csv", "text/csv")
                 st.caption("Accurate recovery requires both fitted centroids within the selected tolerance of known injected centers. Seeded fits and this success criterion do not establish that peaks are independently detectable; small trial counts give noisy estimates.")
+        with st.expander("Detector resolution and FWHM", expanded=False):
+            st.caption("Illustrative detector response models: representative reference widths at 662 keV with square-root energy scaling, not measured detector specifications.")
+            detector_choice = st.selectbox("Detector response", ["HPGe (illustrative)", "NaI(Tl) (illustrative)"], key="detector_choice")
+            detector_separation = st.slider("Peak separation (keV)", 2, 100, 20, key="detector_separation")
+            detector_energy = st.slider("Doublet midpoint (keV)", 200, 1400, 495, key="detector_energy")
+            detector_ref = st.number_input("Reference FWHM at 662 keV (keV)",
+                min_value=0.1, max_value=150.0,
+                value=1.8 if detector_choice.startswith("HPGe") else 46.0,
+                step=0.5, key="detector_reference_fwhm")
+            curve_energy = np.linspace(100, 1600, 300)
+            widths = fwhm_kev(curve_energy, detector_choice, detector_ref)
+            resolution_fig = go.Figure()
+            resolution_fig.add_trace(go.Scatter(x=curve_energy, y=widths,
+                name="FWHM (keV)", mode="lines"))
+            resolution_fig.update_layout(xaxis_title="Energy (keV)",
+                yaxis_title="FWHM (keV)", template="plotly_dark", height=300)
+            st.plotly_chart(resolution_fig, use_container_width=True)
+            local_energy = np.linspace(detector_energy - 120, detector_energy + 120, 800)
+            first, second, combined = illustrative_doublet(
+                local_energy, detector_energy, detector_separation,
+                detector_choice, detector_ref)
+            doublet_fig = go.Figure()
+            for values, label in ((first, "First component"), (second, "Second component"),
+                                  (combined, "Combined response")):
+                doublet_fig.add_trace(go.Scatter(x=local_energy, y=values,
+                    mode="lines", name=label))
+            doublet_fig.update_layout(xaxis_title="Energy (keV)",
+                yaxis_title="Normalized density (1/keV)", template="plotly_dark",
+                height=340)
+            st.plotly_chart(doublet_fig, use_container_width=True)
+            st.metric("FWHM at midpoint", f"{fwhm_kev(detector_energy, detector_choice, detector_ref):.2f} keV")
+            st.metric("Resolution at midpoint",
+                f"{resolution_percent(detector_energy, detector_choice, detector_ref):.2f}%")
+            st.caption("The two equal-area Gaussian components are idealized and noiseless. The plotted density is not a count spectrum. Real HPGe and NaI(Tl) resolution varies with detector design, electronics, and energy.")
         with detected_tab:
             st.subheader("Detected local maxima")
             st.caption("These are noisy candidate maxima, not necessarily separate gamma emissions.")
