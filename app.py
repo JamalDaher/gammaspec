@@ -29,6 +29,7 @@ from gammaspec.decay_chains import chain_populations, equilibrium_class
 from gammaspec.dashboard import build_results_summary, summary_csv, summary_json
 from gammaspec.comparison import compare_spectra, comparison_metrics
 from gammaspec.matching_workbench import rank_reference_candidates
+from gammaspec.calibration_workbench import calibration_diagnostics, measured_resolution_table
 import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
@@ -906,12 +907,55 @@ try:
             st.caption("The reference library is small and incomplete. Missing lines, mixtures, escape peaks, efficiency, intensity, coincidence effects, calibration and statistical uncertainty are not accounted for.")
         st.caption("Candidate matching is not isotope identification. Missing lines, mixtures, calibration error and detector response can change results.")
     with calibration_tab:
-        st.subheader("Energy calibration")
+        st.subheader("Detector calibration and energy resolution")
+        st.caption("Calibration references must be independently established. Fitted mean-energy uncertainty does not include reference-line uncertainties.")
         if enable_calibration:
-            st.dataframe(reference_table(pairs.channel, pairs.energy_kev, calibration), use_container_width=True)
-            st.caption(f"Polynomial degree {calibration_degree}; RMSE {calibration.rmse_kev:.4f} keV")
+            calibration_table, calibration_stats = calibration_diagnostics(
+                pairs.channel, pairs.energy_kev, calibration,
+                spectrum_channels=spectrum.channel.to_numpy())
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Calibration RMSE", f"{calibration_stats['rmse_kev']:.4f} keV")
+            c2.metric("Maximum absolute residual", f"{calibration_stats['max_absolute_residual_kev']:.4f} keV")
+            c3.metric("Reference points", calibration_stats["reference_count"])
+            if calibration_stats["extrapolates_beyond_references"]:
+                st.warning("The calibrated spectrum extends beyond the reference channel range. Extrapolated energies may be unreliable.")
+            st.dataframe(calibration_table, use_container_width=True, hide_index=True)
+            residual_fig = go.Figure(go.Scatter(x=calibration_table.channel,
+                y=calibration_table.residual_kev, mode="markers+lines",
+                name="Reference minus fitted energy"))
+            residual_fig.add_hline(y=0, line_dash="dash")
+            residual_fig.update_layout(xaxis_title="Reference channel",
+                yaxis_title="Calibration residual (keV)", height=300)
+            st.plotly_chart(residual_fig, use_container_width=True)
+            st.download_button("Download calibration diagnostics CSV",
+                calibration_table.to_csv(index=False), "calibration_diagnostics.csv",
+                "text/csv", key="calibration_diagnostics_export")
         else:
-            st.info("Enable channel calibration in the sidebar to inspect residuals.")
+            st.info("Enable channel calibration in the sidebar to inspect fitted residuals.")
+        st.divider()
+        st.subheader("Measured peak energy resolution")
+        st.caption("FWHM values must come from independently fitted or measured peaks. The table does not automatically infer a detector response model.")
+        resolution_text = st.text_area("Energy (keV), FWHM (keV) pairs",
+            value="59.54,1.0\\n661.657,1.8\\n1332.492,2.1",
+            height=100, key="resolution_measurements")
+        try:
+            resolution_pairs = pd.read_csv(__import__("io").StringIO(resolution_text),
+                header=None, names=["energy_kev", "fwhm_kev"])
+            resolution_data = measured_resolution_table(
+                resolution_pairs.energy_kev, resolution_pairs.fwhm_kev)
+            st.dataframe(resolution_data, use_container_width=True, hide_index=True)
+            resolution_fig = go.Figure(go.Scatter(x=resolution_data.energy_kev,
+                y=resolution_data.resolution_percent, mode="markers+lines",
+                name="Measured resolution"))
+            resolution_fig.update_layout(xaxis_title="Peak energy (keV)",
+                yaxis_title="FWHM / energy (%)", height=300)
+            st.plotly_chart(resolution_fig, use_container_width=True)
+            st.download_button("Download energy resolution CSV",
+                resolution_data.to_csv(index=False), "measured_energy_resolution.csv",
+                "text/csv", key="resolution_export")
+        except (ValueError, TypeError) as exc:
+            st.warning(f"Enter valid positive energy and FWHM pairs: {exc}")
+        st.caption("Example FWHM values are illustrative. Energy calibration and resolution are distinct measurements; neither validates isotope identity or detector safety.")
     with validation_tab:
       with st.expander("Synthetic regression benchmark", expanded=True):
         st.caption("Regression against injected toy-model parameters, NOT validation against measured spectra.")
