@@ -12,6 +12,7 @@ from gammaspec.core import simulate_spectrum, find_photopeaks, read_spectrum
 from gammaspec.fitting import fit_detected_peaks, gaussian_background
 from gammaspec.overlap import fit_overlapping_peaks, double_gaussian_background
 from gammaspec.selection import selected_peak_energies
+from gammaspec.residuals import residual_comparison, residual_rms
 import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
@@ -205,6 +206,49 @@ try:
             else:
                 st.info("No detected or fitted peak energies to compare.")
             st.caption("Detected maxima and fitted centroids are different quantities. Two fitted components do not establish two physical emissions.")
+        with st.expander("Fit residual diagnostics", expanded=False):
+            st.caption("Compare observed-minus-model residuals on the same energy channels. Standardized residuals divide by √max(observed counts, 1).")
+            successful_fits = ([] if fits is None else
+                               [row for row in fits.to_dict("records") if row.get("status") == "ok"])
+            if overlap_result is None or not successful_fits:
+                st.info("Enable both single-peak and two-component fitting to compare residuals.")
+            else:
+                try:
+                    midpoint = (overlap_center_1 + overlap_center_2) / 2
+                    closest_fit = min(successful_fits,
+                                      key=lambda row: abs(row["centroid_kev"] - midpoint))
+                    residuals = residual_comparison(
+                        spectrum, closest_fit, overlap_result,
+                        (overlap_center_1, overlap_center_2), overlap_window
+                    )
+                    residual_fig = go.Figure()
+                    for field, label in (
+                        ("single_standardized_residual", "Single Gaussian"),
+                        ("two_standardized_residual", "Two components"),
+                    ):
+                        residual_fig.add_trace(go.Scatter(
+                            x=residuals.energy_kev, y=residuals[field],
+                            mode="lines+markers", name=label,
+                            marker={"size": 4},
+                        ))
+                    residual_fig.add_hline(y=0, line_dash="dash", line_color="gray")
+                    residual_fig.update_layout(
+                        xaxis_title="Energy (keV)",
+                        yaxis_title="Standardized residual",
+                        template="plotly_dark", height=340,
+                    )
+                    st.plotly_chart(residual_fig, use_container_width=True)
+                    col1, col2 = st.columns(2)
+                    col1.metric("Single Gaussian · RMS",
+                                f'{residual_rms(residuals["single_standardized_residual"]):.2f}')
+                    col2.metric("Two components · RMS",
+                                f'{residual_rms(residuals["two_standardized_residual"]):.2f}')
+                    st.download_button("Download residual data CSV",
+                                       residuals.to_csv(index=False),
+                                       "fit_residuals.csv", "text/csv")
+                    st.caption("Lower RMS indicates smaller residuals on this window, but the models have different numbers of parameters and may have been fitted on different windows. This is not a formal statistical model-selection test.")
+                except (ValueError, KeyError) as exc:
+                    st.warning(f"Residual comparison unavailable: {exc}")
         with detected_tab:
             st.subheader("Detected local maxima")
             st.caption("These are noisy candidate maxima, not necessarily separate gamma emissions.")
