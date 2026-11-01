@@ -32,6 +32,7 @@ from gammaspec.matching_workbench import rank_reference_candidates
 from gammaspec.calibration_workbench import calibration_diagnostics, measured_resolution_table
 from gammaspec.notebook import create_experiment_record, notebook_json, load_notebook_json
 from gammaspec.project_archive import export_experiment_archive, import_experiment_archive
+from gammaspec.restoration import restoration_settings, compare_reanalysis
 import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
@@ -83,6 +84,30 @@ with st.expander("Explore GammaSpec capabilities", expanded=False):
     """)
 st.caption("Research and education prototype · Not for radiation safety, dosimetry, or authoritative isotope identification.")
 with st.sidebar:
+    st.header("Restore experiment")
+    restore_upload = st.file_uploader("Experiment archive (.zip)", type=["zip"],
+        key="restore_workspace_upload")
+    if restore_upload is not None:
+        try:
+            candidate_record, candidate_spectrum, candidate_manifest = import_experiment_archive(
+                restore_upload.getvalue())
+            candidate_settings = restoration_settings(candidate_record, candidate_spectrum)
+            st.caption(f"Ready: {candidate_record['title']} · {len(candidate_spectrum):,} channels")
+            if st.button("Restore archive and reanalyze", key="restore_workspace_button"):
+                st.session_state["restored_workspace"] = {
+                    "record": candidate_record, "spectrum": candidate_spectrum,
+                    "settings": candidate_settings, "manifest": candidate_manifest}
+                st.session_state["experiment_title"] = candidate_record["title"]
+                st.session_state["experiment_notes"] = candidate_record["notes"]
+                st.rerun()
+        except (ValueError, UnicodeDecodeError) as exc:
+            st.error(f"Archive cannot be restored: {exc}")
+    if "restored_workspace" in st.session_state:
+        if st.button("Return to normal workspace", key="clear_restored_workspace"):
+            del st.session_state["restored_workspace"]
+            st.rerun()
+        st.info("Restored archive active. Saved energy calibration is already reflected in the spectrum; it is not applied again.")
+    st.divider()
     st.header("Workspace controls")
     st.caption("Choose a source, then expand the settings you need.")
     isotope = st.selectbox("Source", ["Cs-137", "Co-60", "Background", "Overlapping demo"])
@@ -125,12 +150,21 @@ try:
     if not upload and isotope not in (*gammaspec_core.LINES, "Background"):
         st.error(f"Selected source {isotope!r} is unavailable in the loaded GammaSpec core. See Deployment diagnostics in the sidebar.")
         st.stop()
-    spectrum = (import_spectrum_text(upload.getvalue(), format=import_format,
-                energy_per_channel_kev=channel_width, energy_offset_kev=energy_offset)
-                if upload else simulate_spectrum(isotope, live_time_s=live_time, seed=int(seed)))
+    restored_workspace = st.session_state.get("restored_workspace")
+    if restored_workspace is not None:
+        spectrum = restored_workspace["spectrum"].copy()
+        restored_settings = restored_workspace["settings"]
+        prominence = restored_settings["peak_prominence"]
+        fit_window = restored_settings["fit_half_window_kev"]
+        peak_separation = restored_settings["minimum_peak_separation_kev"]
+        fit_enabled = restored_settings["fit_enabled"]
+    else:
+        spectrum = (import_spectrum_text(upload.getvalue(), format=import_format,
+                    energy_per_channel_kev=channel_width, energy_offset_kev=energy_offset)
+                    if upload else simulate_spectrum(isotope, live_time_s=live_time, seed=int(seed)))
     if upload:
         st.info("Imported spectrum: energy scale must be independently calibrated before interpreting peak energies.")
-    if enable_calibration:
+    if enable_calibration and restored_workspace is None:
         try:
             pairs = pd.read_csv(__import__("io").StringIO(calibration_csv), header=None, names=["channel", "energy_kev"])
             calibration = fit_calibration(pairs.channel.to_numpy(), pairs.energy_kev.to_numpy(), degree=calibration_degree)
@@ -141,7 +175,8 @@ try:
             st.error(f"Calibration failed: {exc}")
             st.stop()
     st.divider()
-    source_label = upload.name if upload else f"Synthetic {isotope}"
+    source_label = (restored_workspace["record"]["dataset"] if restored_workspace is not None
+                    else upload.name if upload else f"Synthetic {isotope}")
     st.subheader("Workspace")
     metrics = st.columns(4)
     metrics[0].metric("Dataset", source_label)
@@ -970,6 +1005,18 @@ try:
 
     with notebook_tab:
         st.subheader("Experiment notebook")
+        if restored_workspace is not None:
+            st.success("Reanalysis of restored spectrum is active.")
+            saved_summary = restored_workspace["record"]["analysis"]
+            current_summary = build_results_summary(spectrum, peaks, fits,
+                source_label=source_label,
+                is_imported=restored_workspace["record"]["origin"].startswith("Imported"),
+                calibration_applied=restored_workspace["settings"]["calibration_applied_in_archive"],
+                overlap_result=overlap_result)
+            st.dataframe(pd.DataFrame(compare_reanalysis(saved_summary, current_summary)),
+                use_container_width=True, hide_index=True)
+            st.caption("Differences may arise from software changes or analysis settings not saved in older notebook schemas. Restored energy axes are used as-is; calibration is not reapplied.")
+
         st.caption("Record the current workspace configuration and observations in a portable JSON file. Notes are held only in this browser session until exported; no server-side notebook database is used.")
         notebook_title = st.text_input("Experiment title", value=f"Analysis of {source_label}",
             key="experiment_title")
