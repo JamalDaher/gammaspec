@@ -90,7 +90,7 @@ header[data-testid="stHeader"] { background: transparent; }
 [data-testid="stHorizontalBlock"] > div { min-width:min(100%,170px); }
 div.stDownloadButton button { border-radius:9px; }
 .gs-footnote { color:var(--gs-muted); font-size:.77rem; margin:.3rem 0 1rem; }
-@media(max-width:760px) {
+@media (max-width: 640px) {
  .block-container { padding: .8rem .7rem 2rem; }
  .gs-hero { padding:1rem; border-radius:12px; }
  .gs-hero h1 { font-size:1.85rem; }
@@ -99,6 +99,7 @@ div.stDownloadButton button { border-radius:9px; }
 }
 </style>
 """, unsafe_allow_html=True)
+st.title("GammaSpec")
 st.markdown("""
 <div class="gs-hero">
   <div class="gs-eyebrow">Scientific analysis workspace</div>
@@ -111,7 +112,7 @@ st.markdown("""
   <span class="gs-tag">Reproducible exports</span></div>
 </div>
 """, unsafe_allow_html=True)
-with st.expander("Start here · workspace guide", expanded=False):
+with st.expander("Explore GammaSpec capabilities · Start here", expanded=False):
     st.markdown("""
     **1. Configure** a simulated source or import a measured spectrum in the sidebar.
 
