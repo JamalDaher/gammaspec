@@ -144,11 +144,19 @@ try:
             y = gaussian_background(x, fit["amplitude_counts"], center, fit["sigma_kev"],
                                     fit["background_at_centroid"], fit["slope"])
             fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name=f"Fit {center:.1f} keV"))
+    if isotope == "Overlapping demo" and upload is None and not enable_calibration:
+        for energy in (485.0, 505.0):
+            fig.add_vline(x=energy, line_dash="dot", line_color="orange",
+                          annotation_text=f"Injected {energy:g} keV",
+                          annotation_position="top")
+        fig.update_xaxes(range=[450, 540])
     fig.update_layout(xaxis_title="Energy (keV)", yaxis_title="Counts per channel",
                       yaxis_type="log" if log_scale else "linear", template="plotly_dark")
     overview_tab, peaks_tab, match_tab, calibration_tab, validation_tab, report_tab = st.tabs(
         ["Spectrum", "Peak analysis", "Reference matching", "Calibration", "Validation", "Report"])
     with overview_tab:
+        if isotope == "Overlapping demo" and upload is None and not enable_calibration:
+            st.info("Zoomed to 450–540 keV. Orange lines show injected 485 and 505 keV components. × markers show noisy detected maxima, which can differ from fitted centers.")
         st.caption("Select two candidate × markers using Shift-click or box selection to seed the two-peak fit.")
         st.plotly_chart(fig, use_container_width=True, key="spectrum_peak_selector",
                         on_select=handle_peak_selection, selection_mode=("points", "box"))
