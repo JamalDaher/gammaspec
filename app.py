@@ -28,6 +28,7 @@ from gammaspec.decay import HALF_LIVES_YEARS, remaining_activity, decay_fraction
 from gammaspec.decay_chains import chain_populations, equilibrium_class
 from gammaspec.dashboard import build_results_summary, summary_csv, summary_json
 from gammaspec.comparison import compare_spectra, comparison_metrics
+from gammaspec.matching_workbench import rank_reference_candidates
 import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
@@ -875,6 +876,34 @@ try:
         else:
             st.dataframe(candidates, use_container_width=True)
             st.download_button("Download candidates CSV", candidates.to_csv(index=False), "candidates.csv", "text/csv")
+        with st.expander("Peak matching and candidate ranking workbench", expanded=True):
+            st.caption("Rank reference-line energy agreements using one-to-one assignments. Scores are heuristics, NOT probabilities or validated confidence levels.")
+            matching_input = st.radio("Observed peak energies",
+                ["Fitted centroids (fallback to maxima)", "Detected maxima"],
+                horizontal=True, key="matching_input")
+            workbench_observed = (observed if matching_input.startswith("Fitted")
+                                  else peaks.energy_kev.to_numpy())
+            ranking, matched_details = rank_reference_candidates(
+                workbench_observed, tolerance_kev=match_tolerance)
+            if ranking.matched_lines.max() == 0:
+                st.info("No reference-line agreements within the selected tolerance.")
+            else:
+                st.dataframe(ranking, use_container_width=True, hide_index=True)
+                st.markdown("**Matched line residuals**")
+                st.dataframe(matched_details, use_container_width=True, hide_index=True)
+                ranked_fig = go.Figure(go.Bar(
+                    x=ranking.candidate, y=ranking.ranking_score,
+                    name="Heuristic ranking score"))
+                ranked_fig.update_layout(yaxis_title="Heuristic score (not probability)",
+                    xaxis_title="Reference candidate", height=300)
+                st.plotly_chart(ranked_fig, use_container_width=True)
+                st.download_button("Download candidate ranking CSV",
+                    ranking.to_csv(index=False), "gamma_candidate_ranking.csv",
+                    "text/csv", key="ranking_csv")
+                st.download_button("Download line matching details CSV",
+                    matched_details.to_csv(index=False), "gamma_line_matches.csv",
+                    "text/csv", key="matching_details_csv")
+            st.caption("The reference library is small and incomplete. Missing lines, mixtures, escape peaks, efficiency, intensity, coincidence effects, calibration and statistical uncertainty are not accounted for.")
         st.caption("Candidate matching is not isotope identification. Missing lines, mixtures, calibration error and detector response can change results.")
     with calibration_tab:
         st.subheader("Energy calibration")
