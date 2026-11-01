@@ -97,11 +97,13 @@ try:
         st.caption("Quality flags: nominal, review_fit (large weighted residuals), possible_overlap, or fit_failed. Flags are heuristic.")
         st.caption("Uncertainties are approximate 1σ covariance estimates from weighted least squares; overlapping peaks may bias fits.")
         st.download_button("Download fit table CSV", fits.to_csv(index=False), "peak_fits.csv", "text/csv")
+    candidates = None
     if match_enabled:
       with match_tab:
         st.subheader("Reference line candidates")
-        observed = (fits.loc[fits.status == "ok", "centroid_kev"].to_numpy()
-                    if fits is not None and not fits.empty else peaks.energy_kev.to_numpy())
+        successful_fits = (fits.loc[fits.status == "ok", "centroid_kev"].to_numpy()
+                           if fits is not None and not fits.empty else np.array([]))
+        observed = successful_fits if len(successful_fits) else peaks.energy_kev.to_numpy()
         candidates = match_candidates(observed, tolerance_kev=match_tolerance)
         if candidates.empty:
             st.info("No reference-line matches within the selected tolerance.")
