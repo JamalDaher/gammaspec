@@ -3,6 +3,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from gammaspec.core import simulate_spectrum, find_photopeaks, read_spectrum
 from gammaspec.fitting import fit_detected_peaks, gaussian_background
+from gammaspec.overlap import fit_overlapping_peaks, double_gaussian_background
 import numpy as np
 import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
@@ -35,6 +36,13 @@ with st.sidebar:
     match_tolerance = st.slider("Line matching tolerance (keV)", 1, 30, 12)
     fit_window = st.slider("Fit half-window (keV)", 25, 90, 55)
     peak_separation = st.slider("Minimum peak separation (keV)", 0, 100, 35)
+    st.divider()
+    st.subheader("Overlapping peaks (experimental)")
+    overlap_enabled = st.toggle("Fit two overlapping peaks", value=False)
+    if overlap_enabled:
+        overlap_center_1 = st.number_input("First peak center (keV)", min_value=0.0, value=485.0)
+        overlap_center_2 = st.number_input("Second peak center (keV)", min_value=0.0, value=505.0)
+        overlap_window = st.slider("Two-peak half-window (keV)", 10, 100, 35)
     st.divider()
     upload = st.file_uploader("Import spectrum CSV or counts text", type=["csv", "txt"])
     if upload is not None:
@@ -71,6 +79,34 @@ try:
                              marker={"size": 9, "symbol": "x"}, name="Candidate peaks"))
     fits = fit_detected_peaks(spectrum, prominence=prominence, half_window_kev=fit_window,
                               min_separation_kev=peak_separation) if fit_enabled else None
+    overlap_result = None
+    if overlap_enabled:
+        try:
+            overlap_result = fit_overlapping_peaks(
+                spectrum, (overlap_center_1, overlap_center_2), half_window_kev=overlap_window
+            )
+            components = overlap_result["components"]
+            x_overlap = np.linspace(
+                min(overlap_center_1, overlap_center_2) - overlap_window,
+                max(overlap_center_1, overlap_center_2) + overlap_window, 400,
+            )
+            c1, c2 = components
+            combined = double_gaussian_background(
+                x_overlap,
+                c1["amplitude_counts"], c1["centroid_kev"], c1["fwhm_kev"] / 2.354820045,
+                c2["amplitude_counts"], c2["centroid_kev"], c2["fwhm_kev"] / 2.354820045,
+                overlap_result["background_intercept"], overlap_result["background_slope"],
+            )
+            fig.add_trace(go.Scatter(x=x_overlap, y=combined, mode="lines",
+                                     name="Two-peak combined fit", line={"dash": "dash"}))
+            for i, component in enumerate(components, 1):
+                mu = component["centroid_kev"]
+                sigma = component["fwhm_kev"] / 2.354820045
+                profile = component["amplitude_counts"] * np.exp(-0.5 * ((x_overlap - mu) / sigma) ** 2)
+                fig.add_trace(go.Scatter(x=x_overlap, y=profile, mode="lines",
+                                         name=f"Gaussian component {i}", line={"dash": "dot"}))
+        except ValueError as exc:
+            st.warning(f"Two-peak fit unavailable: {exc}")
     if fits is not None:
         for fit in fits.to_dict("records"):
             if fit.get("status") != "ok":
@@ -90,6 +126,18 @@ try:
     with peaks_tab:
         st.subheader("Candidate peaks")
         st.dataframe(peaks, use_container_width=True)
+    if overlap_enabled:
+      with peaks_tab:
+        st.subheader("Simultaneous two-peak fit (experimental)")
+        if overlap_result is None:
+            st.info("Choose two distinct starting energies and a suitable fit window.")
+        else:
+            st.dataframe(pd.DataFrame(overlap_result["components"]), use_container_width=True)
+            st.metric("Reduced chi-square (descriptive)", f'{overlap_result["reduced_chi_square"]:.2f}')
+            st.caption(f'Quality flag: {overlap_result["quality_flag"]}. Two-component fitting is model-dependent and does not prove that two physical gamma lines are present.')
+            st.download_button("Download two-peak fit CSV",
+                               pd.DataFrame(overlap_result["components"]).to_csv(index=False),
+                               "overlap_fits.csv", "text/csv")
     if fits is not None:
       with peaks_tab:
         st.subheader("Gaussian photopeak fits")
