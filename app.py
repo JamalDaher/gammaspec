@@ -127,30 +127,6 @@ with st.expander("Explore GammaSpec capabilities · Start here", expanded=False)
     """)
 st.markdown('<div class="gs-footnote">Educational research prototype · Not for radiation safety, dosimetry, or certified isotope identification.</div>', unsafe_allow_html=True)
 with st.sidebar:
-    st.header("Restore experiment")
-    restore_upload = st.file_uploader("Experiment archive (.zip)", type=["zip"],
-        key="restore_workspace_upload")
-    if restore_upload is not None:
-        try:
-            candidate_record, candidate_spectrum, candidate_manifest = import_experiment_archive(
-                restore_upload.getvalue())
-            candidate_settings = restoration_settings(candidate_record, candidate_spectrum)
-            st.caption(f"Ready: {candidate_record['title']} · {len(candidate_spectrum):,} channels")
-            if st.button("Restore archive and reanalyze", key="restore_workspace_button"):
-                st.session_state["restored_workspace"] = {
-                    "record": candidate_record, "spectrum": candidate_spectrum,
-                    "settings": candidate_settings, "manifest": candidate_manifest}
-                st.session_state["experiment_title"] = candidate_record["title"]
-                st.session_state["experiment_notes"] = candidate_record["notes"]
-                st.rerun()
-        except (ValueError, UnicodeDecodeError) as exc:
-            st.error(f"Archive cannot be restored: {exc}")
-    if "restored_workspace" in st.session_state:
-        if st.button("Return to normal workspace", key="clear_restored_workspace"):
-            del st.session_state["restored_workspace"]
-            st.rerun()
-        st.info("Restored archive active. Saved energy calibration is already reflected in the spectrum; it is not applied again.")
-    st.divider()
     st.header("Workspace controls")
     st.caption("Configure acquisition, fitting and calibration here. Scroll the analysis tabs to explore the workbench.")
     st.caption("Choose a source, then expand the settings you need.")
@@ -189,6 +165,31 @@ with st.sidebar:
         st.code(f"Loaded core: {gammaspec_core.__file__}\\nAvailable sources: {list(gammaspec_core.LINES)}")
         if "Overlapping demo" not in gammaspec_core.LINES:
             st.error("Running GammaSpec core is outdated. Confirm deployment branch is main and reboot/redeploy.")
+
+    st.divider()
+    st.header("Restore experiment")
+    restore_upload = st.file_uploader("Experiment archive (.zip)", type=["zip"],
+        key="restore_workspace_upload")
+    if restore_upload is not None:
+        try:
+            candidate_record, candidate_spectrum, candidate_manifest = import_experiment_archive(
+                restore_upload.getvalue())
+            candidate_settings = restoration_settings(candidate_record, candidate_spectrum)
+            st.caption(f"Ready: {candidate_record['title']} · {len(candidate_spectrum):,} channels")
+            if st.button("Restore archive and reanalyze", key="restore_workspace_button"):
+                st.session_state["restored_workspace"] = {
+                    "record": candidate_record, "spectrum": candidate_spectrum,
+                    "settings": candidate_settings, "manifest": candidate_manifest}
+                st.session_state["experiment_title"] = candidate_record["title"]
+                st.session_state["experiment_notes"] = candidate_record["notes"]
+                st.rerun()
+        except (ValueError, UnicodeDecodeError) as exc:
+            st.error(f"Archive cannot be restored: {exc}")
+    if "restored_workspace" in st.session_state:
+        if st.button("Return to normal workspace", key="clear_restored_workspace"):
+            del st.session_state["restored_workspace"]
+            st.rerun()
+        st.info("Restored archive active. Saved energy calibration is already reflected in the spectrum; it is not applied again.")
 
 try:
     if not upload and isotope not in (*gammaspec_core.LINES, "Background"):
