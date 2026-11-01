@@ -8,6 +8,7 @@ import pandas as pd
 from gammaspec.calibration import fit_calibration, calibrate_spectrum, reference_table
 from gammaspec.identification import match_candidates
 from gammaspec.validation import benchmark, summary
+from gammaspec.importers import import_spectrum_text
 
 st.set_page_config(page_title="GammaSpec", page_icon="☢️", layout="wide")
 st.title("GammaSpec · Gamma-Ray Spectroscopy")
@@ -28,9 +29,17 @@ with st.sidebar:
     match_enabled = st.toggle("Compare reference gamma lines", value=True)
     match_tolerance = st.slider("Line matching tolerance (keV)", 1, 30, 12)
     fit_window = st.slider("Fit half-window (keV)", 25, 90, 55)
-    upload = st.file_uploader("Import CSV", type=["csv"])
+    upload = st.file_uploader("Import spectrum CSV or counts text", type=["csv", "txt"])
+    if upload is not None:
+        import_format = st.selectbox("Import format", ["auto", "csv", "counts"])
+        channel_width = st.number_input("Energy scale (keV/channel) for uncalibrated files", min_value=0.001, value=0.8)
+        energy_offset = st.number_input("Energy offset (keV)", value=0.0)
 try:
-    spectrum = read_spectrum(upload) if upload else simulate_spectrum(isotope, live_time_s=live_time, seed=int(seed))
+    spectrum = (import_spectrum_text(upload.getvalue(), format=import_format,
+                energy_per_channel_kev=channel_width, energy_offset_kev=energy_offset)
+                if upload else simulate_spectrum(isotope, live_time_s=live_time, seed=int(seed)))
+    if upload:
+        st.info("Imported spectrum: energy scale must be independently calibrated before interpreting peak energies.")
     if enable_calibration:
         try:
             pairs = pd.read_csv(__import__("io").StringIO(calibration_csv), header=None, names=["channel", "energy_kev"])
