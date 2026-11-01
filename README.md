@@ -2,7 +2,7 @@
 
 Educational, open-source gamma-ray spectroscopy simulator and spectrum viewer.
 
-## Features (v0.8)
+## Features (v0.9)
 - Seeded Poisson simulation of illustrative Cs-137, Co-60 and background spectra
 - Interactive Plotly chart with logarithmic scale option
 - Candidate peak detection using SciPy prominence
@@ -14,6 +14,7 @@ Educational, open-source gamma-ray spectroscopy simulator and spectrum viewer.
 - Text-based measured-spectrum import (CSV or one-count-per-line) with validation and explicit energy scale
 - Five-tab analysis workspace with acquisition metrics, grouped controls and export actions
 - Downloadable, printable self-contained HTML reports with spectrum chart, fits and reference matches
+- Peak candidate deduplication, reduced chi-square diagnostics and heuristic overlap flags
 - Automated pytest suite and GitHub Actions CI
 
 ## Quick start
@@ -39,7 +40,8 @@ Synthetic peaks use Gaussian profiles with illustrative amplitudes and widths pl
 - v0.6: text-based spectrum import (implemented); independent measured-spectrum validation remains outstanding
 - v0.7: organized five-tab analysis workspace (implemented)
 - v0.8: downloadable HTML analysis reports (implemented)
-- Later: detector data adapters, measured-spectrum validation and efficiency calibration
+- v0.9: peak quality indicators and duplicate suppression (implemented)
+- Later: multi-peak deconvolution, detector data adapters, measured-spectrum validation and efficiency calibration
 
 ## License
 MIT — see LICENSE.
